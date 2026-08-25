@@ -81,13 +81,71 @@ fun OtaScreen(
             }
         }
 
-        // Available OTA Packages List
-        Text(
-            text = "AVAILABLE FIRMWARE PACKAGES",
-            style = MaterialTheme.typography.labelMedium,
-            color = TextMuted,
-            letterSpacing = 1.sp
-        )
+        // Available OTA Packages Header with Refresh
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "AVAILABLE FIRMWARE PACKAGES",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextMuted,
+                letterSpacing = 1.sp
+            )
+            IconButton(
+                onClick = { viewModel.loadPackages() }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Query OTA Repository",
+                    tint = AmberAccent
+                )
+            }
+        }
+
+        if (uiState.availablePackages.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudDownload,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Text(
+                        text = "No packages retrieved from repository",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Querying live vehicle/OEM gateway at ${com.royalenfield.provisioning.core.config.EnvironmentConfig.ffBaseUrl}/api/v1/ota/packages",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = { viewModel.loadPackages() },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = AmberAccent)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Query Repository Gateway", color = AmberAccent, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
 
         uiState.availablePackages.forEach { pkg ->
             val isSelected = uiState.selectedPackage?.id == pkg.id

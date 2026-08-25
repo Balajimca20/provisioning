@@ -24,17 +24,43 @@ class OtaViewModel(
 
     init {
         loadPackages()
+        queryClusterFirmware()
+    }
+
+    fun queryClusterFirmware() {
+        viewModelScope.launch {
+            val installed = otaRepository.queryInstalledFirmware()
+            val slot = otaRepository.queryActiveSlot()
+            _uiState.update {
+                it.copy(
+                    currentInstalledVersion = "$installed ($slot)"
+                )
+            }
+        }
     }
 
     fun loadPackages() {
         viewModelScope.launch {
-            val packages = otaRepository.getAvailablePackages()
-            _uiState.update {
-                it.copy(
-                    availablePackages = packages,
-                    selectedPackage = packages.firstOrNull()
-                )
-            }
+            _uiState.update { it.copy(stageStatusText = "Querying live OTA repository...") }
+            otaRepository.getAvailablePackages()
+                .onSuccess { packages ->
+                    _uiState.update {
+                        it.copy(
+                            availablePackages = packages,
+                            selectedPackage = packages.firstOrNull(),
+                            errorMessage = if (packages.isEmpty()) "No firmware packages currently found in repository" else null
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            availablePackages = emptyList(),
+                            selectedPackage = null,
+                            errorMessage = "OTA Repository offline: ${error.localizedMessage}"
+                        )
+                    }
+                }
         }
     }
 

@@ -123,10 +123,11 @@ export function loadWifiChangeLogs(): WifiLogRecord[] {
   return sampleLogs;
 }
 
+let wifiLogCounter = 0;
 export function appendWifiChangeLog(log: Omit<WifiLogRecord, 'id' | 'timestamp'>): WifiLogRecord {
   const current = loadWifiChangeLogs();
   const newRecord: WifiLogRecord = {
-    id: `log-${Date.now()}`,
+    id: `wifi-log-${Date.now()}-${++wifiLogCounter}-${Math.random().toString(36).substring(2, 7)}`,
     timestamp: new Date().toLocaleString(),
     ...log
   };

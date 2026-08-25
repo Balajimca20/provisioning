@@ -15,6 +15,8 @@ interface CommandEntry {
   isError?: boolean;
 }
 
+let terminalCounter = 0;
+
 export const TerminalDrawer: React.FC<TerminalDrawerProps> = ({ adbState }) => {
   const [commandInput, setCommandInput] = useState('');
   const [history, setHistory] = useState<CommandEntry[]>([
@@ -51,7 +53,7 @@ export const TerminalDrawer: React.FC<TerminalDrawerProps> = ({ adbState }) => {
     setHistory((prev) => [
       ...prev,
       {
-        id: `cmd-${Date.now()}`,
+        id: `cmd-${Date.now()}-${++terminalCounter}-${Math.random().toString(36).substring(2, 7)}`,
         command: trimmed,
         output: result,
         timestamp: new Date().toLocaleTimeString(),
