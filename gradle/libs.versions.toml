@@ -1,0 +1,58 @@
+[versions]
+# --- Entries inferred from your existing root build.gradle.kts references.
+# VERSION NUMBERS BELOW ARE PLACEHOLDERS — copy the real ones from your actual catalog;
+# I only know these aliases exist, not what they're pinned to.
+agp = "8.6.0"
+kotlin = "2.0.20"
+composeCompiler = "1.5.14"
+navigationSafeArgs = "2.8.9"        # matches the literal version already in root build.gradle.kts
+googleServices = "4.4.2"
+firebaseCrashlyticsPlugin = "3.0.3" # matches the literal version already in root build.gradle.kts
+sqldelight = "2.0.2"
+kotlinxSerialization = "1.7.1"
+
+# --- New for this port ---
+hilt = "2.51.1"
+ksp = "2.0.20-1.0.25"               # must match your Kotlin version above
+composeBom = "2024.09.00"
+activityCompose = "1.9.2"
+lifecycleViewmodelCompose = "2.8.6"
+lifecycleProcess = "2.8.6"
+navigationCompose = "2.8.0"
+hiltNavigationCompose = "1.2.0"
+okhttp = "4.12.0"
+coroutines = "1.8.1"
+material = "1.12.0"
+
+[plugins]
+# --- Existing aliases referenced by your root build.gradle.kts (reconcile versions above) ---
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+
+# --- New for this port ---
+hiltAndroid = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+
+[libraries]
+# --- New for this port (androidApp module only, per your call to skip :shared) ---
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
+androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycleProcess" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
+hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+google-material = { module = "com.google.android.material:material", version.ref = "material" }
