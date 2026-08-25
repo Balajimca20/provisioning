@@ -1,5 +1,5 @@
 {
-  "name": "Royal Enfield FF Mechanic",
+  "name": "FF PROVISIONING",
   "description": "Vehicle Wi-Fi connection, ADB provisioning, OTA firmware deployment pipeline, and supplier telemetry diagnostics tool.",
   "requestFramePermissions": [],
   "majorCapabilities": [

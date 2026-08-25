@@ -29,7 +29,7 @@ export const App: React.FC = () => {
     host: '192.168.1.1',
     port: 5555,
     isRoot: true,
-    deviceModel: 'Royal Enfield TFT Instrument Cluster (Tripper Pro v3.2)',
+    deviceModel: 'TFT Instrument Cluster (Tripper Pro v3.2)',
     serialNumber: 'RE-HIM450-SN-8921094',
     androidVersion: 'Android 12 Automotive (API 32 - RE-OS 4.8.1)',
     connectedAt: new Date().toLocaleTimeString(),
@@ -165,9 +165,9 @@ export const App: React.FC = () => {
       <footer className="border-t border-stone-800/80 bg-stone-900/50 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-stone-400">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-stone-300">Royal Enfield FF Mechanic</span>
+            <span className="font-bold text-stone-300">FF PROVISIONING</span>
             <span className="text-stone-600">•</span>
-            <span>com.royalenfield.provisioning</span>
+            <span>Vehicle Diagnostics & Provisioning</span>
           </div>
           <div className="flex items-center gap-3">
             <span>ADB Bridge: 192.168.1.1:5555</span>

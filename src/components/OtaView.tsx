@@ -46,7 +46,7 @@ export const OtaView: React.FC<OtaViewProps> = () => {
     freeStorage: string;
   }>({
     installedVersion: 'Querying cluster...',
-    deviceModel: 'Royal Enfield Automotive Cluster',
+    deviceModel: 'Automotive Cluster',
     activeSlot: 'SLOT A (Active)',
     batteryLevel: 94,
     batteryVoltage: '12.84V',
@@ -61,7 +61,7 @@ export const OtaView: React.FC<OtaViewProps> = () => {
     status: 'idle',
     selectedPackage: null,
     progress: 0,
-    stepDescription: 'Pipeline ready. Load or select firmware build to begin.',
+    stepDescription: 'Pipeline ready. Load or query firmware package to begin.',
     logs: [
       {
         id: generateLogId('ota-init'),

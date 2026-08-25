@@ -154,7 +154,7 @@ export class OtaRepositoryClient {
 
     let deviceModel = modelRes.trim();
     if (!deviceModel || deviceModel.includes('Command executed')) {
-      deviceModel = 'Royal Enfield Tripper Cluster v2';
+      deviceModel = 'Tripper Cluster v2';
     }
 
     let activeSlot = slotRes.trim();
@@ -199,7 +199,7 @@ export class OtaRepositoryClient {
     if (lower.includes('classic') || lower.includes('bullet') || lower.includes('meteor')) {
       return 'Classic 350 / Meteor 350';
     }
-    return 'Royal Enfield Automotive Cluster';
+    return 'Automotive Cluster';
   }
 
   private formatBytes(bytes: number): string {

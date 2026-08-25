@@ -62,7 +62,7 @@ android {
         create("prod") {
             dimension = "env"
             isDefault = true
-            manifestPlaceholders["appName"] = "Royal Enfield FF Mechanic"
+            manifestPlaceholders["appName"] = "FF Mechanic"
             manifestPlaceholders["envName"] = "PROD"
             manifestPlaceholders["usesCleartextTraffic"] = "false"
 

@@ -33,7 +33,6 @@ class OtaRepository(
             val response = httpClient.get(endpoint).body<List<OtaPackage>>()
             Result.success(response)
         } catch (e: Exception) {
-            // Strict real-time mode: Return failure rather than mock data
             Result.failure(e)
         }
     }

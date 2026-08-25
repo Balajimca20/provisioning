@@ -10,11 +10,9 @@ import {
   ShieldCheck,
   RefreshCw,
   Cpu,
-  Database,
   Eye,
   EyeOff,
   Radio,
-  Smartphone,
   Activity,
 } from 'lucide-react';
 import { AdbState, NetworkDiagnosticProbe, TabType, WifiState } from '../types';
@@ -512,60 +510,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </form>
           )}
-        </div>
-      </div>
-
-      {/* Hardware & Diagnostics Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" />
-          </div>
-          <div>
-            <span className="text-xs text-stone-400 font-mono">Battery Voltage</span>
-            <div className="text-lg font-bold text-stone-100 flex items-baseline gap-1.5">
-              <span>12.84 V</span>
-              <span className="text-xs text-emerald-400 font-medium font-mono">(94% SoC)</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-lg bg-red-950/80 border border-red-800/60 flex items-center justify-center shrink-0">
-            <Cpu className="w-6 h-6 text-red-400" />
-          </div>
-          <div>
-            <span className="text-xs text-stone-400 font-mono">ECU Link Status</span>
-            <div className="text-lg font-bold text-stone-100 flex items-baseline gap-1.5">
-              <span>Nominal</span>
-              <span className="text-xs text-stone-400 font-mono">Sherpa 452</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-lg bg-cyan-950/80 border border-cyan-800/60 flex items-center justify-center shrink-0">
-            <Smartphone className="w-6 h-6 text-cyan-400" />
-          </div>
-          <div>
-            <span className="text-xs text-stone-400 font-mono">TFT OS Version</span>
-            <div className="text-lg font-bold text-stone-100">
-              <span>Android 12</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-lg bg-amber-950/80 border border-amber-800/60 flex items-center justify-center shrink-0">
-            <Database className="w-6 h-6 text-amber-400" />
-          </div>
-          <div>
-            <span className="text-xs text-stone-400 font-mono">Storage Partition</span>
-            <div className="text-lg font-bold text-stone-100 flex items-baseline gap-1.5">
-              <span>25.2 GB</span>
-              <span className="text-xs text-stone-400 font-mono">Free / 28.4G</span>
-            </div>
-          </div>
         </div>
       </div>
 

@@ -137,7 +137,7 @@ export const TerminalDrawer: React.FC<TerminalDrawerProps> = ({ adbState }) => {
         {/* Scrollable Command Logs */}
         <div ref={scrollRef} className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-4">
           <div className="text-stone-500">
-            Royal Enfield Android Automotive Diagnostic Shell (Linux 5.10.104-android12-9-g3918)
+            Android Automotive Diagnostic Shell (Linux 5.10.104-android12-9-g3918)
             <br />
             Type commands or select from presets above.
           </div>

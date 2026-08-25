@@ -114,7 +114,7 @@ export class RealtimeAdbClient {
         host,
         port,
         isRoot: true,
-        deviceModel: 'Royal Enfield TFT Instrument Cluster (Tripper Pro v3.2)',
+        deviceModel: 'TFT Instrument Cluster (Tripper Pro v3.2)',
         serialNumber: 'RE-HIM450-SN-8921094',
         androidVersion: 'Android 12 Automotive (API 32 - RE-OS 4.8.1)',
         connectedAt: new Date().toLocaleTimeString(),

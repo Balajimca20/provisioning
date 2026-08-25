@@ -57,7 +57,7 @@ export class SsidValidator {
   }
 
   /**
-   * Validates if string conforms to Royal Enfield vehicle AP standard
+   * Validates if string conforms to vehicle AP standard
    */
   public static isValidVehicleSsid(input: string): boolean {
     return this.getValidationError(input) === null;

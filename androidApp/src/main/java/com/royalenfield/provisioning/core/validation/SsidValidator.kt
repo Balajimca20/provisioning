@@ -1,7 +1,7 @@
 package com.royalenfield.provisioning.core.validation
 
 /**
- * Validates Royal Enfield vehicle SoftAP SSIDs.
+ * Validates vehicle SoftAP SSIDs.
  * Format: RE_XXXX_XXXXXX (exactly 14 characters, uppercase alphanumeric + underscore)
  */
 object SsidValidator {

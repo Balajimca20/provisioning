@@ -33,10 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base sm:text-lg uppercase">
-                  Royal Enfield
-                </span>
-                <span className="text-xs px-2 py-0.5 bg-red-950/80 text-red-400 border border-red-800/50 rounded font-semibold tracking-wide uppercase">
-                  FF Mechanic
+                  FF PROVISIONING
                 </span>
               </div>
               <p className="text-xs text-stone-400 font-mono hidden sm:block">

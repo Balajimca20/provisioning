@@ -61,7 +61,7 @@ fun DashboardScreen(
                         tint = RedPrimary
                     )
                     Text(
-                        text = "ROYAL ENFIELD",
+                        text = "FF PROVISIONING",
                         style = MaterialTheme.typography.titleMedium,
                         color = RedPrimary,
                         fontWeight = FontWeight.Bold,

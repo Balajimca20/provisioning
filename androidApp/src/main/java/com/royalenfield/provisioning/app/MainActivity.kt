@@ -93,17 +93,11 @@ fun MainAppContent() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "ROYAL ENFIELD",
-                            color = TextPrimary,
+                            text = "FF PROVISIONING",
+                            color = RedPrimary,
                             fontWeight = FontWeight.Black,
                             fontSize = 15.sp,
                             letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "FF MECHANIC",
-                            color = RedPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
                         )
                     }
                 },
