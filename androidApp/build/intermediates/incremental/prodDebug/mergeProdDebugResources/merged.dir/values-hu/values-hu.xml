@@ -51,7 +51,6 @@
     <string msgid="8038256446254964252" name="default_error_message">"Érvénytelen adat"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Előugró ablak"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Legördülő menü"</string>
-    <string name="error_a11y_label">Hiba: érvénytelen</string>
     <string name="error_icon_content_description">Hiba</string>
     <string name="exposed_dropdown_menu_content_description">Legördülő menü megjelenítése</string>
     <string name="icon_content_description">Párbeszédpanel ikonja</string>
@@ -97,7 +96,6 @@
     <string msgid="7617233117134790350" name="m3c_dialog">"Párbeszédpanel"</string>
     <string msgid="3177828188723359358" name="m3c_dropdown_menu_collapsed">"Összecsukva"</string>
     <string msgid="2360841780724299882" name="m3c_dropdown_menu_expanded">"Kibontva"</string>
-    <string msgid="8687821690726149911" name="m3c_dropdown_menu_toggle">"Legördülő menü átváltása"</string>
     <string msgid="6152806324422087846" name="m3c_search_bar_search">"Keresés"</string>
     <string msgid="6152755701819882931" name="m3c_snackbar_dismiss">"Elvetés"</string>
     <string msgid="7655536806087401899" name="m3c_suggestions_available">"Javaslatok alább"</string>
@@ -129,9 +127,6 @@
     <string name="material_timepicker_select_time">Időpont kiválasztása</string>
     <string name="material_timepicker_text_input_mode_description">Időbevitelhez váltson szövegbeviteli módba.</string>
     <string name="mtrl_badge_numberless_content_description">Új értesítés</string>
-    <string name="mtrl_checkbox_state_description_checked">Bejelölve</string>
-    <string name="mtrl_checkbox_state_description_indeterminate">Részlegesen bejelölve</string>
-    <string name="mtrl_checkbox_state_description_unchecked">Nincs bejelölve</string>
     <string name="mtrl_chip_close_icon_content_description">Eltávolítás (%1$s)</string>
     <string name="mtrl_exceed_max_badge_number_content_description" ns2:ignore="PluralsCandidate">Több mint %1$d új értesítés</string>
     <string name="mtrl_picker_a11y_next_month">Váltás a következő hónapra</string>
@@ -144,7 +139,7 @@
     <string name="mtrl_picker_date_header_selected">%1$s</string>
     <string name="mtrl_picker_date_header_title">Válasszon dátumot</string>
     <string name="mtrl_picker_date_header_unselected">Kiválasztott dátum</string>
-    <string name="mtrl_picker_day_of_week_column_header">%1$s</string>
+    <string name="mtrl_picker_day_of_week_column_header">Napok oszlopa: %1$s</string>
     <string name="mtrl_picker_end_date_description">Befejezés dátuma: %1$s</string>
     <string name="mtrl_picker_invalid_format">Érvénytelen formátum.</string>
     <string name="mtrl_picker_invalid_format_example">Példa: %1$s</string>
@@ -175,17 +170,13 @@
     <string name="mtrl_timepicker_confirm">OK</string>
     <string msgid="542007171693138492" name="navigation_menu">"Navigációs menü"</string>
     <string msgid="6610465462668679431" name="not_selected">"Nincs kijelölve"</string>
+    <string msgid="875452955155264703" name="off">"Ki"</string>
+    <string msgid="8655164131929253426" name="on">"Be"</string>
     <string name="password_toggle_content_description">Jelszó megjelenítése</string>
     <string msgid="5941395253238309765" name="range_end">"Tartomány vége"</string>
     <string msgid="7097486360902471446" name="range_start">"Tartomány kezdete"</string>
     <string msgid="6264217191555673260" name="search_menu_title">"Keresés"</string>
-    <string name="searchview_clear_text_content_description">Szöveg törlése</string>
-    <string name="searchview_navigation_content_description">Vissza</string>
     <string msgid="6043586758067023" name="selected">"Kijelölve"</string>
-    <string name="side_sheet_accessibility_pane_title">Oldalsáv</string>
-    <string msgid="4139871816613051306" name="state_empty">"Üres"</string>
-    <string msgid="5834637030682409883" name="state_off">"Ki"</string>
-    <string msgid="1490883874751719580" name="state_on">"Be"</string>
     <string msgid="6277540029070332960" name="status_bar_notification_info_overflow">"999+"</string>
     <string msgid="2561197295334830845" name="switch_role">"Kapcsoló"</string>
     <string msgid="1672349317127674378" name="tab">"Lap"</string>

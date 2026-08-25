@@ -28,7 +28,7 @@ class AdbKeyPairProvider(
             AdbKeyPair.generate(keyFile, pubFile)
         }
 
-        cachedKeyPair = keyPair
+        cachedKeyPair = keyPair as AdbKeyPair?
         return keyPair
     }
 }

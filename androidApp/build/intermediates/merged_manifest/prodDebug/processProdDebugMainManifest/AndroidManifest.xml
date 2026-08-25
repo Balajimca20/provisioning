@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.royalenfield.ffmechanic.app"
+    package="com.royalenfield.provisioning.debug"
     android:versionCode="1"
     android:versionName="1.0" >
 
@@ -8,44 +8,38 @@
         android:minSdkVersion="26"
         android:targetSdkVersion="34" />
 
-    <!-- Network ADB (TCP to the vehicle unit) and the Supplier Feed GraphQL API -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Required for WifiNetworkSpecifier and binding process to network -->
-    <uses-permission android:name="android.permission.BIND_WIFI_ADVANCED" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <permission
-        android:name="com.royalenfield.ffmechanic.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:name="com.royalenfield.provisioning.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
 
-    <uses-permission android:name="com.royalenfield.ffmechanic.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+    <uses-permission android:name="com.royalenfield.provisioning.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 
     <application
-        android:name="com.royalenfield.ffmechanic.app.app.FfMechanicApplication"
-        android:allowBackup="false"
+        android:name="com.royalenfield.provisioning.app.FfMechanicApp"
+        android:allowBackup="true"
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
-        android:label="FF Mechanic"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="Royal Enfield FF Mechanic"
+        android:roundIcon="@android:drawable/sym_def_app_icon"
+        android:supportsRtl="true"
         android:testOnly="true"
-        android:theme="@style/Theme.FFMechanic" >
-
-        <!--
-          TODO(SECURITY): the original desktop client set verify=False on its HTTPS calls to
-          cbp-in-api.royalenfield.com (skips TLS cert validation). Do not carry that over here
-          via a permissive network_security_config "cleartextTrafficPermitted" or a trust-all
-          TrustManager for this domain — fix the corporate cert chain instead. A
-          network_security_config.xml is only appropriate for the vehicle's own local ADB
-          endpoint (192.168.1.1), which is unauthenticated by nature.
-        -->
-
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:usesCleartextTraffic="false" >
         <activity
-            android:name="com.royalenfield.ffmechanic.app.app.MainActivity"
+            android:name="com.royalenfield.provisioning.app.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
-            android:theme="@style/Theme.FFMechanic" >
+            android:windowSoftInputMode="adjustResize" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -55,7 +49,7 @@
 
         <provider
             android:name="androidx.startup.InitializationProvider"
-            android:authorities="com.royalenfield.ffmechanic.app.androidx-startup"
+            android:authorities="com.royalenfield.provisioning.debug.androidx-startup"
             android:exported="false" >
             <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"

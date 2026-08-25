@@ -1,5 +1,6 @@
 package com.royalenfield.provisioning.feature.supplierfeed.data
 
+import android.annotation.SuppressLint
 import com.royalenfield.provisioning.core.network.GraphQLClient
 import com.royalenfield.provisioning.core.network.GraphQLRequest
 import io.ktor.client.HttpClient
@@ -9,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class DeviceTelemetryData(
     val serialNumber: String,
@@ -26,6 +28,7 @@ data class DeviceTelemetryData(
     val canBusHealth: String
 )
 
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class GetDeviceQueryResult(
     val getDevice: DeviceTelemetryData? = null
