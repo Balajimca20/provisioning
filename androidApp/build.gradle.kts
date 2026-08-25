@@ -3,52 +3,93 @@ plugins {
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.hiltAndroid)
-    alias(libs.plugins.ksp)
 }
 
 android {
-    namespace = "com.royalenfield.ffmechanic.app"
+    namespace = "com.royalenfield.provisioning"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.royalenfield.ffmechanic.app"
+        applicationId = "com.royalenfield.provisioning"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
     }
 
-    // --- Environment flavors, reading the DEV/UAT/PROD values already in gradle.properties ---
-    // (URL_FF_*, URL_PROVISION_*, API_KEY_*). Same pattern your existing CBP/FF/GraphQL config
-    // uses — this just extends it to the ported Supplier Feed + OTA config.
+    // --- Environment flavors (DEV, UAT, PROD) with unique application IDs, manifest placeholders & config ---
     flavorDimensions += "env"
     productFlavors {
         create("dev") {
             dimension = "env"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["appName"] = "FF Mechanic (DEV)"
+            manifestPlaceholders["envName"] = "DEV"
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+
+            buildConfigField("String", "BUILD_VARIANT", "\"dev\"")
+            buildConfigField("String", "ENVIRONMENT_NAME", "\"DEV\"")
             buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_DEV")}\"")
             buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_DEV")}\"")
             buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_DEV")}\"")
             buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEV")}\"")
+            buildConfigField("boolean", "IS_DEV", "true")
+            buildConfigField("boolean", "IS_UAT", "false")
+            buildConfigField("boolean", "IS_PROD", "false")
+            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
+            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
         }
         create("uat") {
             dimension = "env"
-            // gradle.properties has no distinct UAT value for FF/PROVISION-adjacent OTA/API keys
-            // beyond what's listed — falls back to the *_UAT keys that do exist, flagged where not.
+            applicationIdSuffix = ".uat"
+            versionNameSuffix = "-uat"
+            manifestPlaceholders["appName"] = "FF Mechanic (UAT)"
+            manifestPlaceholders["envName"] = "UAT"
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+
+            buildConfigField("String", "BUILD_VARIANT", "\"uat\"")
+            buildConfigField("String", "ENVIRONMENT_NAME", "\"UAT\"")
             buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_UAT")}\"")
             buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_UAT")}\"")
             buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_UAT")}\"")
-            // No API_KEY_OTA_UAT in gradle.properties — falls back to the "default" OTA key.
-            // Confirm this is correct; it's a guess to keep the build from failing outright.
-            buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEFAULT")}\"")
+            buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_UAT")}\"")
+            buildConfigField("boolean", "IS_DEV", "false")
+            buildConfigField("boolean", "IS_UAT", "true")
+            buildConfigField("boolean", "IS_PROD", "false")
+            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
+            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
         }
         create("prod") {
             dimension = "env"
             isDefault = true
+            manifestPlaceholders["appName"] = "Royal Enfield FF Mechanic"
+            manifestPlaceholders["envName"] = "PROD"
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
+
+            buildConfigField("String", "BUILD_VARIANT", "\"prod\"")
+            buildConfigField("String", "ENVIRONMENT_NAME", "\"PROD\"")
             buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_PROD")}\"")
             buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_PROD")}\"")
             buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_PROD")}\"")
             buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEFAULT")}\"")
+            buildConfigField("boolean", "IS_DEV", "false")
+            buildConfigField("boolean", "IS_UAT", "false")
+            buildConfigField("boolean", "IS_PROD", "true")
+            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
+            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "false")
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+            isDebuggable = true
+            isMinifyEnabled = false
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -63,12 +104,8 @@ android {
 
     packaging {
         resources {
-            // dadb has fewer transitive dependencies than adam, fewer duplicate META-INF files
-            // but keep these excludes if they still appear
             excludes += "META-INF/INDEX.LIST"
-            // Netty jars also duplicate this metadata file across modules.
             excludes += "META-INF/io.netty.versions.properties"
-            // Duplicate license files from transitive dependencies can break resource merge.
             excludes += "META-INF/LICENSE.md"
             excludes += "META-INF/LICENSE-notice.md"
         }
@@ -83,9 +120,7 @@ android {
     }
 }
 
-// Reads a value straight out of gradle.properties (Gradle exposes it as a project property).
-// Falls back to an empty string + a build-time warning rather than failing outright, since
-// some *_UAT-shaped keys referenced above don't actually exist yet in your gradle.properties.
+// Reads a value straight out of gradle.properties
 fun prop(name: String): String {
     val value = project.findProperty(name) as String?
     if (value.isNullOrBlank()) {
@@ -95,29 +130,39 @@ fun prop(name: String): String {
 }
 
 dependencies {
-    // Compose
+    // Jetpack Compose & AndroidX
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.google.material)
 
-    // DI
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.android.compiler)
-    implementation(libs.hilt.navigation.compose)
+    // Koin Dependency Injection (replacing Hilt)
+    val koinVersion = "3.5.6"
+    implementation("io.insert-koin:koin-core:$koinVersion")
+    implementation("io.insert-koin:koin-android:$koinVersion")
+    implementation("io.insert-koin:koin-androidx-compose:$koinVersion")
 
-    // Networking (GraphQL over OkHttp, mirrors graphql_client.py)
-    implementation(libs.okhttp)
+    // Ktor HTTP Client (replacing raw OkHttp)
+    val ktorVersion = "2.3.12"
+    implementation("io.ktor:ktor-client-core:$ktorVersion")
+    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    implementation("io.ktor:ktor-client-logging:$ktorVersion")
+    implementation("io.ktor:ktor-client-auth:$ktorVersion")
+
+    // Kotlinx Serialization & Coroutines
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.android)
 
     // Network ADB client
     implementation("dev.mobile:dadb:1.2.6")
-
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
 }

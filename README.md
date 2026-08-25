@@ -1,70 +1,48 @@
-# Vehicle Wi-Fi & ADB Connection System - Complete Implementation
+# Royal Enfield FF Mechanic Android Application
+
+### Modern Architecture Stack:
+- **Architecture**: **MVVM (Model-View-ViewModel)** with explicit Domain/Data/Presentation layers and unidirectional StateFlow streams.
+- **UI Framework**: **Jetpack Compose (Material 3)** with reactive state observation and dark theme palette.
+- **Language & Async**: **Kotlin 1.9+** with Coroutines and Flow.
+- **Dependency Injection**: **Koin** (`io.insert-koin:koin-android`, `koin-androidx-compose`) with modular definitions (`networkModule`, `adbModule`, `repositoryModule`, `domainModule`, `viewModelModule`).
+- **Network & API Client**: **Ktor HTTP Client** (`io.ktor:ktor-client-core`, `io.ktor:ktor-client-okhttp`, `ktor-client-content-negotiation`, `ktor-serialization-kotlinx-json`) powering GraphQL OEM telemetry and OTA manifest queries.
+- **Device Bridge**: **Dadb** network ADB client for vehicle diagnostics and `/data/` partition XML sync.
+
+---
 
 ## 📋 Documentation Index
 
 ### Quick Start
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** ← Start here for code examples and snippets
-
-### Detailed Guides
-- **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - Architecture, design decisions, state rules, and technical details
-- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Unit tests, integration tests, manual test scenarios, and performance testing
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - High-level overview of all deliverables
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** ← Code examples and snippets
+- **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - MVVM architecture, Koin modules, Ktor client, and state rules
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Unit tests, integration tests, and manual test scenarios
 
 ---
 
-## 🎯 What Was Built
+## 🎯 Features & Core Components
 
-A complete Android system for connecting to non-internet vehicle Wi-Fi access points and executing remote file modifications via ADB.
+#### 1. **Koin Dependency Injection Engine** (`core/di/AppModule.kt`)
+- `networkModule`: Singleton Ktor `HttpClient` configured with timeouts, logging, and auth headers, plus `GraphQLClient` and `VehicleNetworkConnectionHelper`.
+- `adbModule`: `AdbKeyPairProvider`, `AdbClient`, and `AdbManager`.
+- `repositoryModule`: `WifiChangeLogRepository`, `OtaRepository`, and `SupplierFeedRepository`.
+- `domainModule`: `WifiUpdateWorkflow`, `OtaPipeline`, and `FetchTelemetryUseCase`.
+- `viewModelModule`: `DashboardViewModel`, `WifiViewModel`, `OtaViewModel`, `SupplierFeedViewModel`, and `TerminalViewModel`.
 
-### Core Components
+#### 2. **Ktor Client API Integration** (`core/network/KtorClientFactory.kt`, `GraphQLClient.kt`)
+- Replaces OkHttp boilerplate with idiomatic Ktor DSL.
+- Executes GraphQL queries (`getDevice(serialNumber: $serial)`) with Kotlinx Serialization.
+- Manages authenticated headers and connection retries.
 
-#### 1. **SsidValidator** (`core/validation/SsidValidator.kt`)
-```kotlin
-// Validates SSID format: RE_XXXX_XXXXXX (14 chars)
-SsidValidator.isValidVehicleSsid("RE_LXHD_250925")  // ✅ true
-SsidValidator.getValidationError("RE_SHORT")        // ❌ Error message
-```
+#### 3. **SSID Validator & Network Helper** (`core/validation/SsidValidator.kt`, `core/network/VehicleNetworkConnectionHelper.kt`)
+- Validates 14-character `RE_XXXX_XXXXXX` vehicle access points.
+- Uses `WifiNetworkSpecifier` without internet capabilities to bind process sockets to the motorcycle.
 
-#### 2. **VehicleNetworkConnectionHelper** (`core/network/VehicleNetworkConnectionHelper.kt`)
-```kotlin
-// Connects to vehicle Wi-Fi and binds app process to it
-networkHelper.connect("RE_LXHD_250925", "password")
-// All subsequent socket operations use this network
-```
-
-#### 3. **AdbClient** (`core/adb/AdbClient.kt`)
-```kotlin
-// Low-level ADB protocol operations
-adbClient.connect("192.168.1.1", 5555)
-adbClient.runShell("su 0 id")
-adbClient.pull("/path/to/file", localFile)
-adbClient.push(localFile, "/path/to/file")
-```
-
-#### 4. **AdbManager** (`core/adb/AdbManager.kt`)
-```kotlin
-// High-level workflow: connect → pull → modify → push → reboot
-adbManager.connectAndUpdateWifi(
-    host = "192.168.1.1",
-    localCacheDir = context.cacheDir,
-    newPassword = "NewPassword",
-    onLog = { message -> Log.d("ADB", message) }
-)
-```
-
-#### 5. **DashboardViewModel** (`feature/dashboard/presentation/DashboardViewModel.kt`)
-```kotlin
-// State management for Wi-Fi and ADB connections
-// Real-time SSID validation
-// Connection polling and status tracking
-```
-
-#### 6. **DashboardScreen** (`feature/dashboard/presentation/DashboardScreen.kt`)
-```kotlin
-// Jetpack Compose UI with state-driven visibility
-// Real-time validation error display
-// Connected/Disconnected state rendering
-```
+#### 4. **Jetpack Compose UI Screens** (`feature/*/presentation/`)
+- `DashboardScreen`: Two-step connection wizard (SoftAP + ADB Bridge) with live stats.
+- `WifiScreen`: Direct XML credential modifier (`WifiConfigStoreSoftAp.xml`), progress bar, and audit trail.
+- `OtaScreen`: A/B dual-slot firmware pipeline with pre-flight checks, flash progress, and reboot consent.
+- `SupplierFeedScreen`: Interactive GraphQL diagnostic query browser with parameter breakdown.
+- `TerminalScreen`: Live ADB terminal console with command presets.
 
 ---
 
@@ -98,8 +76,8 @@ adbManager.connectAndUpdateWifi(
 
 ### New Files Created
 ```
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/core/validation/SsidValidator.kt
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/core/network/VehicleNetworkConnectionHelper.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/core/validation/SsidValidator.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/core/network/VehicleNetworkConnectionHelper.kt
 ✅ IMPLEMENTATION_GUIDE.md
 ✅ TESTING_GUIDE.md
 ✅ IMPLEMENTATION_SUMMARY.md
@@ -109,16 +87,16 @@ adbManager.connectAndUpdateWifi(
 
 ### Files Modified
 ```
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/feature/dashboard/presentation/DashboardViewModel.kt
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/feature/dashboard/presentation/DashboardScreen.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardViewModel.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardScreen.kt
 ✅ androidApp/src/main/AndroidManifest.xml
 ```
 
 ### Files Unchanged (Already Implemented)
 ```
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/core/adb/AdbClient.kt
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/core/adb/AdbKeyPairProvider.kt
-✅ androidApp/src/main/java/com/royalenfield/ffmechanic/app/core/adb/AdbManager.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbClient.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbKeyPairProvider.kt
+✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbManager.kt
 ✅ androidApp/build.gradle.kts
 ```
 
@@ -334,6 +312,46 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md) for detailed scenarios.
               │ - Dadb (TCP/IP)     │
               └─────────────────────┘
 ```
+
+---
+
+## 🚀 Build Variants (DEV, UAT, PROD)
+
+The application is structured with 3 environment product flavors combined with standard Android build types (`debug` and `release`).
+
+### Flavor Specifications
+
+| Parameter | `dev` Flavor | `uat` Flavor | `prod` Flavor |
+| :--- | :--- | :--- | :--- |
+| **Target Audience** | Local Engineering / Emulator | Staging & Vehicle Test Track | Authorized Royal Enfield Dealerships |
+| **Application ID** | `com.royalenfield.provisioning.dev` | `com.royalenfield.provisioning.uat` | `com.royalenfield.provisioning` |
+| **App Title** | `FF Mechanic (DEV)` | `FF Mechanic (UAT)` | `Royal Enfield FF Mechanic` |
+| **Version Name Suffix** | `-dev` | `-uat` | *(None)* |
+| **Telemetry Endpoint** | Internal Dev Gateway | UAT Staging Server | Production OEM Gateway |
+| **Mock Fallback** | `true` | `true` | `false` |
+| **Debug Logging** | `true` | `true` | `false` |
+
+### Gradle Build Commands
+
+```bash
+# Development Builds
+./gradlew assembleDevDebug      # Fast installable debug APK for developers
+./gradlew assembleDevRelease    # Pre-release APK for engineering testing
+
+# UAT / Staging Builds
+./gradlew assembleUatDebug      # UAT debug build with logging
+./gradlew assembleUatRelease    # Signed UAT candidate for field testing
+
+# Production Builds
+./gradlew assembleProdRelease   # Official production release APK for dealerships
+```
+
+### Config Properties (`gradle.properties`)
+
+Environment variables and secure API credentials are configured via `gradle.properties`:
+- `URL_FF_DEV`, `URL_PROVISION_DEV`, `API_KEY_DEV`, `API_KEY_OTA_DEV`
+- `URL_FF_UAT`, `URL_PROVISION_UAT`, `API_KEY_UAT`, `API_KEY_OTA_UAT`
+- `URL_FF_PROD`, `URL_PROVISION_PROD`, `API_KEY_PROD`, `API_KEY_OTA_DEFAULT`
 
 ---
 

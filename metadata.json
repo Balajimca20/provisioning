@@ -1,0 +1,8 @@
+{
+  "name": "Royal Enfield FF Mechanic",
+  "description": "Vehicle Wi-Fi connection, ADB provisioning, OTA firmware deployment pipeline, and supplier telemetry diagnostics tool.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
