@@ -1,9 +1,9 @@
 package com.royalenfield.provisioning.feature.ota.presentation
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.royalenfield.provisioning.core.adb.AdbClient
 import com.royalenfield.provisioning.feature.ota.data.OtaPackage
 import com.royalenfield.provisioning.feature.ota.data.OtaRepository
 import com.royalenfield.provisioning.feature.ota.domain.OtaPipeline
@@ -13,20 +13,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 class OtaViewModel(
+    private val context: Context,
     private val otaPipeline: OtaPipeline,
-    private val otaRepository: OtaRepository,
-    private val adbClient: AdbClient
+    private val otaRepository: OtaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OtaUiState())
     val uiState: StateFlow<OtaUiState> = _uiState.asStateFlow()
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private var selectedLocalFileUri: Uri? = null
 
     init {
         loadPackages()
@@ -72,15 +74,22 @@ class OtaViewModel(
 
     fun onLocalFileSelected(uri: Uri?) {
         if (uri == null) return
+        selectedLocalFileUri = uri
         viewModelScope.launch {
             _uiState.update { it.copy(stageStatusText = "Ingesting local firmware zip...") }
             
+            // Try to get the actual file size
+            var fileSize: Long = 0
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                fileSize = it.length
+            }
+
             val localPackage = OtaPackage(
                 id = "local_${System.currentTimeMillis()}",
                 vehicleModel = "CUSTOM / LOCAL",
                 targetVersion = "LOCAL_BUILD_${uri.lastPathSegment?.take(8) ?: "EXT"}",
-                sizeBytes = 157286400, // 150MB simulated
-                sizeDisplay = "Local File",
+                sizeBytes = fileSize,
+                sizeDisplay = if (fileSize > 0) "${fileSize / 1024 / 1024} MB" else "Local File",
                 sha256 = "verify-on-push",
                 releaseDate = "N/A",
                 notes = "User-selected firmware: ${uri.path}"
@@ -100,6 +109,9 @@ class OtaViewModel(
 
     fun onSelectPackage(pkg: OtaPackage) {
         _uiState.update { it.copy(selectedPackage = pkg) }
+        if (!pkg.id.startsWith("local")) {
+            selectedLocalFileUri = null
+        }
     }
 
     fun startOtaPipeline() {
@@ -110,186 +122,135 @@ class OtaViewModel(
                     pipelineStage = "PRECHECK",
                     progressPercent = 0,
                     stageStatusText = "Initializing binary stream...",
-                    terminalLogs = listOf(
-                        "[${timestamp()}] [INIT] starting re-ota-daemon v1.2.0",
-                        "[${timestamp()}] [INIT] target: ${pkg.targetVersion}",
-                        "[${timestamp()}] [INIT] origin: ${if (pkg.id.startsWith("local")) "LOCAL_PATH" else "CLOUD_CDN"}"
-                    ),
+                    terminalLogs = emptyList(),
                     errorMessage = null
                 )
             }
+            addLog("$ ota-deploy --target ${pkg.targetVersion} --verbose")
 
-            var isStageHeaderAdded = false
+            // Resolve local file if needed
+            val localFile = if (pkg.id.startsWith("local") && selectedLocalFileUri != null) {
+                copyUriToTempFile(selectedLocalFileUri!!)
+            } else {
+                null
+            }
 
-            otaPipeline.runPipeline(pkg).collect { progress ->
+            otaPipeline.runPipeline(pkg, localFile).collect { progress ->
                 when (progress) {
+                    is OtaProgress.Log -> addLog(progress.message)
                     is OtaProgress.PreCheck -> {
-                        addLog("[${timestamp()}] [SYS] battery_level: ${if (progress.batteryOk) "PASS" else "FAIL"}")
-                        addLog("[${timestamp()}] [SYS] storage_space: ${if (progress.storageOk) "PASS" else "FAIL"}")
                         _uiState.update { it.copy(pipelineStage = "PRECHECK", progressPercent = 5) }
-                        isStageHeaderAdded = false
                     }
                     is OtaProgress.Downloading -> {
-                        if (!isStageHeaderAdded) {
-                            addLog("[${timestamp()}] [NET] GET /packages/${pkg.id}.bin")
-                            addLog("[${timestamp()}] [NET] content_length: ${progress.totalBytes} B")
-                            addLog("") // Spacer for live progress
-                            isStageHeaderAdded = true
-                        }
-
-                        val currentMbVal = progress.bytesTransferred / 1024 / 1024
-                        val totalMbVal = progress.totalBytes / 1024 / 1024
-                        updateLastLog("[${timestamp()}] [NET] ${renderProgressBar(progress.percent)} ${progress.percent}% ${currentMbVal}M/${totalMbVal}M")
-
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "DOWNLOADING",
                                 progressPercent = progress.percent,
-                                currentMb = currentMbVal,
-                                totalMb = totalMbVal,
-                                stageStatusText = "Downloading Binary: ${progress.percent}%"
+                                currentMb = progress.bytesTransferred / 1024 / 1024,
+                                totalMb = progress.totalBytes / 1024 / 1024,
+                                stageStatusText = "DOWNLOADING: ${progress.percent}%"
                             )
-                        }
-                        if (progress.percent == 100) {
-                            addLog("[${timestamp()}] [NET] payload download verified.")
-                            isStageHeaderAdded = false
                         }
                     }
                     is OtaProgress.PushingToVehicle -> {
-                        if (!isStageHeaderAdded) {
-                            addLog("[${timestamp()}] [ADB] streaming payload -> /data/ota/update.zip")
-                            addLog("") 
-                            isStageHeaderAdded = true
-                        }
-                        
-                        updateLastLog("[${timestamp()}] [ADB] ${renderProgressBar(progress.percent)} ${progress.percent}% @ ${progress.speedMbps} MB/s")
-
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "PUSHING",
                                 progressPercent = progress.percent,
                                 transferSpeedMbps = progress.speedMbps,
-                                stageStatusText = "Transferring: ${progress.percent}%"
+                                stageStatusText = "TRANSFERRING: ${progress.percent}%"
                             )
-                        }
-                        if (progress.percent == 100) {
-                            addLog("[${timestamp()}] [ADB] 1 file pushed. sync complete.")
-                            isStageHeaderAdded = false
                         }
                     }
                     is OtaProgress.VerifyingChecksum -> {
-                        if (!isStageHeaderAdded) {
-                            addLog("[${timestamp()}] [HASH] verifying sha256 checksum...")
-                            isStageHeaderAdded = true
-                        }
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "VERIFYING",
                                 progressPercent = progress.percent,
-                                stageStatusText = "Verifying Integrity: ${progress.percent}%"
+                                stageStatusText = "VERIFYING: ${progress.percent}%"
                             )
-                        }
-                        if (progress.sha256Matched) {
-                            addLog("[${timestamp()}] [HASH] update.zip: OK (${pkg.sha256.take(12)}...)")
-                            isStageHeaderAdded = false
                         }
                     }
                     is OtaProgress.FlashingPartition -> {
-                        if (!isStageHeaderAdded) {
-                            addLog("[${timestamp()}] [FLASH] flash-client --write --partition ${progress.currentSlot}")
-                            addLog("")
-                            isStageHeaderAdded = true
-                        }
-                        
-                        updateLastLog("[${timestamp()}] [FLASH] ${renderProgressBar(progress.percent)} write_op: ${progress.percent}%")
-
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "FLASHING",
                                 progressPercent = progress.percent,
                                 activePartition = progress.currentSlot,
-                                stageStatusText = "Flashing ${progress.currentSlot.uppercase()}: ${progress.percent}%"
+                                stageStatusText = "FLASHING ${progress.currentSlot.uppercase()}: ${progress.percent}%"
                             )
-                        }
-                        if (progress.percent == 100) {
-                            addLog("[${timestamp()}] [FLASH] write operation successful.")
-                            isStageHeaderAdded = false
                         }
                     }
                     is OtaProgress.AwaitingReboot -> {
-                        addLog("[${timestamp()}] [PROC] system staged. ready for activation.")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "AWAITING_REBOOT",
                                 progressPercent = 100,
-                                stageStatusText = "Awaiting Reboot"
+                                stageStatusText = "STAGED: PENDING REBOOT"
                             )
                         }
                     }
                     is OtaProgress.Complete -> {
-                        addLog("[${timestamp()}] [SUCCESS] RE_OTA_DONE: updated to ${pkg.targetVersion}")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "COMPLETE",
-                                stageStatusText = "Finished",
+                                stageStatusText = "DEPLOYMENT SUCCESSFUL",
                                 currentInstalledVersion = pkg.targetVersion
                             )
                         }
                     }
                     is OtaProgress.Failed -> {
-                        addLog("[${timestamp()}] [FATAL] deploy-error: ${progress.reason}")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "FAILED",
                                 errorMessage = progress.reason,
-                                stageStatusText = "Failed"
+                                stageStatusText = "DEPLOYMENT FAILED"
                             )
                         }
                     }
                 }
             }
+            
+            // Cleanup temp file
+            localFile?.delete()
+        }
+    }
+
+    private fun copyUriToTempFile(uri: Uri): File? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val tempFile = File(context.cacheDir, "update_staging.zip")
+            FileOutputStream(tempFile).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+            tempFile
+        } catch (e: Exception) {
+            null
         }
     }
 
     fun confirmReboot() {
         val targetVer = _uiState.value.selectedPackage?.targetVersion ?: "RE_UPDATED_V2.2.0"
         viewModelScope.launch {
-            addLog("[${timestamp()}] [CMD] executing system reboot...")
+            addLog("[CMD] executing sys-reboot...")
             otaPipeline.executeRebootAndVerify()
             _uiState.update {
                 it.copy(
                     pipelineStage = "COMPLETE",
-                    stageStatusText = "Rebooting...",
+                    stageStatusText = "REBOOTING...",
                     currentInstalledVersion = targetVer
                 )
             }
-            addLog("[${timestamp()}] [DONE] terminal signal lost. (vehicle rebooting)")
+            addLog("[DONE] terminal signal lost. (vehicle rebooting)")
         }
     }
 
     private fun addLog(log: String) {
         _uiState.update {
             val updated = it.terminalLogs.toMutableList()
-            updated.add(log)
+            updated.add("[${timestamp()}] $log")
             it.copy(terminalLogs = updated)
         }
-    }
-
-    private fun updateLastLog(log: String) {
-        _uiState.update {
-            val updated = it.terminalLogs.toMutableList()
-            if (updated.isNotEmpty()) {
-                updated[updated.size - 1] = log
-            } else {
-                updated.add(log)
-            }
-            it.copy(terminalLogs = updated)
-        }
-    }
-
-    private fun renderProgressBar(percent: Int): String {
-        val bars = percent / 5
-        return "[" + "=".repeat(bars) + ">" + " ".repeat(20 - bars) + "]"
     }
 
     private fun timestamp(): String = timeFormat.format(Date())

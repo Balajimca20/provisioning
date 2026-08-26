@@ -53,7 +53,7 @@ fun OtaScreen(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- System Status Header ---
+        // --- Target Info Card ---
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
@@ -65,7 +65,7 @@ fun OtaScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "Target Partition", fontSize = 11.sp, color = TextMuted)
+                    Text(text = "Active Firmware", fontSize = 11.sp, color = TextMuted)
                     Text(
                         text = uiState.currentInstalledVersion,
                         fontSize = 14.sp,
@@ -80,7 +80,7 @@ fun OtaScreen(
                     border = BorderStroke(1.dp, BlueAccent.copy(alpha = 0.3f))
                 ) {
                     Text(
-                        text = "A/B REDUNDANCY",
+                        text = "A/B REDUNDANT",
                         color = BlueAccent,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
@@ -90,19 +90,21 @@ fun OtaScreen(
             }
         }
 
-        // --- Deployment Control & Telemetry Dashboard ---
+        // --- Deployment Control Card (Real-time Telemetry Dashboard) ---
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
             shape = RoundedCornerShape(12.dp),
-            border = if (uiState.pipelineStage != "IDLE") BorderStroke(1.dp, AmberAccent.copy(alpha = 0.5f)) else null
+            border = if (uiState.pipelineStage != "IDLE" && uiState.pipelineStage != "COMPLETE") 
+                BorderStroke(1.dp, AmberAccent.copy(alpha = 0.5f)) else null
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "DEPLOYMENT PIPELINE",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextPrimary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -110,7 +112,7 @@ fun OtaScreen(
                 if (uiState.pipelineStage == "IDLE" || uiState.pipelineStage == "COMPLETE" || uiState.pipelineStage == "FAILED") {
                     Button(
                         onClick = { viewModel.startOtaPipeline() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         enabled = uiState.selectedPackage != null,
                         colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
                         shape = RoundedCornerShape(8.dp)
@@ -122,7 +124,7 @@ fun OtaScreen(
                 } else if (uiState.pipelineStage == "AWAITING_REBOOT") {
                     Button(
                         onClick = { viewModel.confirmReboot() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AmberAccent),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -131,11 +133,11 @@ fun OtaScreen(
                         Text("REBOOT & ACTIVATE SLOT", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 } else {
-                    // Active Pipeline Telemetry
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Active Telemetry Dashboard
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         LinearProgressIndicator(
                             progress = { uiState.progressPercent / 100f },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            modifier = Modifier.fillMaxWidth().height(8.dp),
                             color = AmberAccent,
                             trackColor = DarkSurfaceVariant,
                             strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
@@ -143,7 +145,8 @@ fun OtaScreen(
                         
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = uiState.stageStatusText.uppercase(),
@@ -159,7 +162,7 @@ fun OtaScreen(
                                     "DOWNLOADING" -> "${uiState.currentMb}MB / ${uiState.totalMb}MB"
                                     "PUSHING" -> "${uiState.transferSpeedMbps} MB/s"
                                     "FLASHING" -> "Partition: ${uiState.activePartition}"
-                                    else -> "Processing..."
+                                    else -> "STAGING..."
                                 },
                                 color = TextSecondary,
                                 fontSize = 11.sp,
@@ -172,7 +175,7 @@ fun OtaScreen(
                 if (uiState.errorMessage != null) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "ERROR: ${uiState.errorMessage}",
+                        text = "CRITICAL_ERROR: ${uiState.errorMessage}",
                         color = RedPrimary,
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace
@@ -195,7 +198,7 @@ fun OtaScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "STDOUT_STREAM",
+                        text = "SYS_STDOUT_STREAM",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted,
                         fontFamily = FontFamily.Monospace
@@ -208,12 +211,12 @@ fun OtaScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 160.dp, max = 340.dp)
+                        .heightIn(min = 180.dp, max = 400.dp)
                         .verticalScroll(terminalScrollState)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -221,10 +224,10 @@ fun OtaScreen(
                             Text(
                                 text = log,
                                 color = when {
-                                    log.contains("[FATAL]") || log.contains("error") -> RedPrimary
-                                    log.contains("[SUCCESS]") || log.contains("OK") || log.contains("PASS") -> GreenAccent
-                                    log.contains("[SYS]") || log.contains("[INIT]") -> BlueAccent
-                                    log.contains("[NET]") || log.contains("[ADB]") -> AmberAccent
+                                    log.contains("[FATAL]") || log.contains("deploy-error") || log.contains("❌") -> RedPrimary
+                                    log.contains("[SUCCESS]") || log.contains("OK") || log.contains("PASS") || log.contains("✅") -> GreenAccent
+                                    log.contains("[SYS]") || log.contains("[INIT]") || log.contains("⚙️") -> BlueAccent
+                                    log.contains("[NET]") || log.contains("[ADB]") || log.contains("🚀") || log.contains("📲") || log.contains("🛠️") || log.contains("🔍") -> AmberAccent
                                     else -> TextSecondary
                                 },
                                 fontFamily = FontFamily.Monospace,
@@ -241,10 +244,10 @@ fun OtaScreen(
             }
         }
         
-        // --- Package Picker (Only visible when IDLE) ---
+        // --- Package Picker ---
         if (uiState.pipelineStage == "IDLE") {
             Text(
-                text = "AVAILABLE FIRMWARE BUILDS",
+                text = "FIRMWARE CATALOG",
                 style = MaterialTheme.typography.labelMedium,
                 color = TextMuted,
                 modifier = Modifier.padding(top = 8.dp)
@@ -295,7 +298,7 @@ fun OtaScreen(
             ) {
                 Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = TextPrimary)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("LOAD LOCAL (.ZIP)", color = TextPrimary)
+                Text("LOAD LOCAL ARCHIVE (.ZIP)", color = TextPrimary)
             }
         }
     }
