@@ -11,8 +11,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.RandomAccessFile
-import java.util.zip.ZipFile
 
 sealed class OtaProgress {
     data class PreCheck(val batteryOk: Boolean, val storageOk: Boolean) : OtaProgress()
@@ -62,13 +60,14 @@ class OtaPipeline(
             emit(OtaProgress.PreCheck(batteryOk = true, storageOk = true))
 
             // Step 2: Escalate Root Permissions
-            emit(OtaProgress.Log("[SYS] Escalating privileges with 'adb root'..."))
-            val rootRes = adbClient.runShell("root")
-            if (rootRes is AdbResult.Failure && !rootRes.message.contains("already running as root")) {
-                emit(OtaProgress.Failed("ADB Root failed: ${rootRes.message}"))
-                return@flow
+            emit(OtaProgress.Log("🔓 Acquiring root permissions on the Android device…"))
+            val rootRes = adbClient.restartAsRoot()
+            if (rootRes is AdbResult.Failure) {
+                emit(OtaProgress.Log("⚠️ Root escalation notice (continuing): ${rootRes.message}"))
+            } else if (rootRes is AdbResult.Success) {
+                emit(OtaProgress.Log("🔓 Root status: ${rootRes.data}"))
             }
-            delay(500)
+            delay(300)
 
             // Step 3: Stage update.zip to target path
             val remotePath = "/data/ota_package/update.zip"
@@ -105,22 +104,28 @@ class OtaPipeline(
 
             // Step 4: Metadata Extraction (payload.bin analyzer)
             emit(OtaProgress.Log("[SYS] Running payload metadata analyzer..."))
-            val metadata = withContext(Dispatchers.IO) { extractZipMetadata(workFile) }
+            val payloadInfo = withContext(Dispatchers.IO) {
+                try {
+                    OTAZipInspector.inspect(workFile)
+                } catch (e: Exception) {
+                    null
+                }
+            }
             
-            if (metadata == null) {
+            if (payloadInfo == null) {
                 emit(OtaProgress.Failed("Invalid update archive: payload.bin descriptors not found."))
                 return@flow
             }
             
-            emit(OtaProgress.Log("⚙️ payload_offset: ${metadata.offset}"))
-            emit(OtaProgress.Log("⚙️ payload_size: ${metadata.size}"))
-            emit(OtaProgress.Log("✅ Technical parameters extracted to buffer."))
+            emit(OtaProgress.Log("⚙️ payload_offset: ${payloadInfo.payloadOffset}"))
+            emit(OtaProgress.Log("⚙️ payload_size: ${payloadInfo.payloadSize}"))
+            emit(OtaProgress.Log("✅ Technical parameters extracted from ZIP header."))
 
             // Step 5: Execute Update Engine via ADB streaming
             val updateCmd = "update_engine_client --update --follow " +
                     "--payload=file://$remotePath " +
-                    "--offset=${metadata.offset} --size=${metadata.size} " +
-                    "--headers=\"${metadata.headers}\""
+                    "--offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize} " +
+                    "--headers=\"${payloadInfo.headers}\""
             
             emit(OtaProgress.Log("[CMD] cd /data/ota_package"))
             emit(OtaProgress.Log("[CMD] Spawning update_engine_client daemon..."))
@@ -170,73 +175,6 @@ class OtaPipeline(
             // Issuing the final hardware reboot (adb reboot)
             adbClient.runShell("reboot")
             true
-        }
-    }
-
-    private data class OtaMetadata(val offset: Long, val size: Long, val headers: String)
-
-    /**
-     * Technical implementation of the Python metadata extraction logic.
-     * Finds the absolute byte offset of payload.bin's compressed data within the ZIP archive.
-     */
-    private fun extractZipMetadata(file: File): OtaMetadata? {
-        return try {
-            val zip = ZipFile(file)
-            
-            // 1. Get properties from payload_properties.txt (headers)
-            val propsEntry = zip.getEntry("payload_properties.txt") ?: return null
-            val headers = zip.getInputStream(propsEntry).bufferedReader().use { it.readText() }
-                .replace("\n", " ").trim()
-
-            // 2. Locate absolute offset of payload.bin data
-            val payloadEntry = zip.getEntry("payload.bin") ?: return null
-            val raf = RandomAccessFile(file, "r")
-            var dataOffset = -1L
-            
-            val signature = 0x04034b50 // Local File Header Signature
-            val buffer = ByteArray(4)
-            var currentPos = 0L
-            
-            // Scan ZIP for the Local File Header of 'payload.bin' to get absolute offset
-            while (currentPos < file.length() - 30) {
-                raf.seek(currentPos)
-                raf.read(buffer)
-                val sig = (buffer[0].toInt() and 0xFF) or 
-                          (buffer[1].toInt() and 0xFF shl 8) or 
-                          (buffer[2].toInt() and 0xFF shl 16) or 
-                          (buffer[3].toInt() and 0xFF shl 24)
-                
-                if (sig == signature) {
-                    raf.seek(currentPos + 26)
-                    val b1 = raf.read()
-                    val b2 = raf.read()
-                    val nameLen = (b2 shl 8) or (b1 and 0xFF)
-                    val b3 = raf.read()
-                    val b4 = raf.read()
-                    val extraLen = (b4 shl 8) or (b3 and 0xFF)
-                    
-                    val nameBytes = ByteArray(nameLen)
-                    raf.read(nameBytes)
-                    val entryName = String(nameBytes)
-                    
-                    if (entryName == "payload.bin") {
-                        // Data starts after Signature(4) + Fixed Header(26) + Name + Extra
-                        dataOffset = currentPos + 30 + nameLen + extraLen
-                        break
-                    }
-                    // Skip to next header candidate using the entry's compressed size
-                    currentPos += 30 + nameLen + extraLen + zip.getEntry(entryName).compressedSize
-                } else {
-                    currentPos++
-                }
-            }
-            raf.close()
-            zip.close()
-
-            if (dataOffset == -1L) return null
-            OtaMetadata(offset = dataOffset, size = payloadEntry.size, headers = headers)
-        } catch (e: Exception) {
-            null
         }
     }
 }
