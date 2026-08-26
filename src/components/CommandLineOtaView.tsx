@@ -8,18 +8,14 @@ interface CommandLineOtaViewProps {
 }
 
 export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(() => {
-    // Provide a default ready staging zip so user can run immediately
-    const blob = new Blob(['OTA_PAYLOAD_BINARY_STAGING'], { type: 'application/zip' });
-    return new File([blob], 'update_staging.zip', { type: 'application/zip', lastModified: Date.now() });
-  });
-  const [selectedFileName, setSelectedFileName] = useState<string | null>('update_staging.zip');
-  const [selectedFileSizeDescription, setSelectedFileSizeDescription] = useState<string | null>('961.4 MB (Staged on Device)');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedFileSizeDescription, setSelectedFileSizeDescription] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
 
   const [logLines, setLogLines] = useState<OTALogLine[]>([]);
   const [progress, setProgress] = useState<number>(0);
-  const [statusText, setStatusText] = useState<string>('READY FOR COMMAND LINE OTA UPGRADE');
+  const [statusText, setStatusText] = useState<string>('WAITING FOR OTA ZIP PACKAGE…');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [rebootConsentRequested, setRebootConsentRequested] = useState<boolean>(false);
   const [resultAlertMessage, setResultAlertMessage] = useState<string | null>(null);
@@ -52,16 +48,6 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
     setSelectedFileName(file.name);
     setSelectedFileSizeDescription(formatFileSize(file.size));
     setStatusText('READY: ' + file.name.toUpperCase());
-    setFileError(null);
-  };
-
-  const selectPresetPackage = (name: string, sizeDesc: string) => {
-    const blob = new Blob(['OTA_PAYLOAD_BINARY_STAGING'], { type: 'application/zip' });
-    const file = new File([blob], name, { type: 'application/zip' });
-    setSelectedFile(file);
-    setSelectedFileName(name);
-    setSelectedFileSizeDescription(sizeDesc);
-    setStatusText('READY: ' + name.toUpperCase());
     setFileError(null);
   };
 
@@ -162,32 +148,6 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
             <Upload className="w-3.5 h-3.5 text-[#00D2B4]" />
             <span>Select Local Package (.zip)</span>
           </button>
-
-          {/* Quick Pre-selected Package options */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <button
-              onClick={() => selectPresetPackage('update_staging.zip', '961.4 MB (Staged on Vehicle)')}
-              disabled={isRunning}
-              className={`px-2.5 py-1.5 rounded-md border text-[11px] font-mono transition-colors ${
-                selectedFileName === 'update_staging.zip'
-                  ? 'border-[#00D2B4] bg-[#00D2B4]/20 text-[#00D2B4] font-bold'
-                  : 'border-stone-700 hover:border-stone-500 text-stone-300 bg-stone-900/60'
-              }`}
-            >
-              📦 Staging (961 MB)
-            </button>
-            <button
-              onClick={() => selectPresetPackage('RE_HIM450_V2.2.0.zip', '1.24 GB (Release Target)')}
-              disabled={isRunning}
-              className={`px-2.5 py-1.5 rounded-md border text-[11px] font-mono transition-colors ${
-                selectedFileName === 'RE_HIM450_V2.2.0.zip'
-                  ? 'border-[#00D2B4] bg-[#00D2B4]/20 text-[#00D2B4] font-bold'
-                  : 'border-stone-700 hover:border-stone-500 text-stone-300 bg-stone-900/60'
-              }`}
-            >
-              🚀 V2.2.0 Release
-            </button>
-          </div>
 
           {selectedFileName && (
             <div className="flex items-center space-x-2 bg-black/40 border border-stone-800 rounded px-2.5 py-1">
