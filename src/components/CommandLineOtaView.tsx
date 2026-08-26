@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CommandLineOtaService, OTALogLine } from '../lib/commandLineOtaPipeline';
 import { RealtimeAdbClient } from '../lib/realtimeAdbClient';
-import { Upload, AlertCircle, RefreshCw, CheckCircle2, Bug } from 'lucide-react';
+import { Upload, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface CommandLineOtaViewProps {
   onQuickReboot?: () => void;
@@ -17,7 +17,6 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
   const [selectedFileSizeDescription, setSelectedFileSizeDescription] = useState<string | null>('961.4 MB (Staged on Device)');
   const [fileError, setFileError] = useState<string | null>(null);
 
-  const [isVerbose, setIsVerbose] = useState<boolean>(true); // Default enabled for instant troubleshooting
   const [logLines, setLogLines] = useState<OTALogLine[]>([]);
   const [progress, setProgress] = useState<number>(0);
   const [statusText, setStatusText] = useState<string>('READY FOR COMMAND LINE OTA UPGRADE');
@@ -81,8 +80,7 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
       (p, text) => {
         setProgress(p);
         setStatusText(text);
-      },
-      isVerbose
+      }
     );
 
     let successSignature = false;
@@ -191,28 +189,6 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
             </button>
           </div>
 
-          {/* Verbose Mode Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsVerbose(!isVerbose)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
-              isVerbose
-                ? 'border-emerald-500/80 bg-emerald-950/40 text-emerald-300 shadow-sm shadow-emerald-500/10'
-                : 'border-stone-800 bg-stone-900/90 text-stone-400 hover:text-stone-200 hover:border-stone-700'
-            }`}
-            title="Enable detailed ADB shell execution traces and daemon signature parsing"
-          >
-            <Bug className={`w-3.5 h-3.5 ${isVerbose ? 'text-emerald-400' : 'text-stone-500'}`} />
-            <span>Verbose Mode</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                isVerbose ? 'bg-emerald-500 text-black' : 'bg-stone-800 text-stone-400'
-              }`}
-            >
-              {isVerbose ? 'ON' : 'OFF'}
-            </span>
-          </button>
-
           {selectedFileName && (
             <div className="flex items-center space-x-2 bg-black/40 border border-stone-800 rounded px-2.5 py-1">
               <span className="font-mono text-xs font-semibold text-[#00D2B4] truncate max-w-xs">
@@ -233,18 +209,11 @@ export const CommandLineOtaView: React.FC<CommandLineOtaViewProps> = () => {
             <span className="w-2 h-2 rounded-full bg-[#00D2B4] animate-pulse"></span>
             <span>{statusText}</span>
           </span>
-          <div className="flex items-center space-x-2 text-[11px]">
-            {isVerbose && (
-              <span className="text-emerald-400 font-mono tracking-wider bg-emerald-950/50 border border-emerald-800/60 px-1.5 py-0.5 rounded">
-                [VERBOSE ADB TRACE]
-              </span>
-            )}
-            {isRunning && (
-              <span className="text-amber-400 uppercase tracking-wider animate-pulse">
-                [Pipeline Active]
-              </span>
-            )}
-          </div>
+          {isRunning && (
+            <span className="text-amber-400 text-[11px] uppercase tracking-wider animate-pulse">
+              [Pipeline Active]
+            </span>
+          )}
         </div>
       </div>
 

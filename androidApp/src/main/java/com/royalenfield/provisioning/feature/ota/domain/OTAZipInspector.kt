@@ -1,5 +1,6 @@
 package com.royalenfield.provisioning.feature.ota.domain
 
+import android.util.Log
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.zip.ZipFile
@@ -12,20 +13,30 @@ data class OTAPayloadInfo(
 )
 
 object OTAZipInspector {
+    private const val TAG = "OTAZipInspector"
+    private val CRAU_MAGIC = byteArrayOf(0x43, 0x72, 0x41, 0x55) // 'C', 'r', 'A', 'U'
+
     /**
      * Extracts payload.bin offset, size, and payload_properties.txt straight from the ZIP container
      * without extracting the entire multi-gigabyte package to disk.
+     * Verifies the 'CrAU' magic bytes at the calculated offset.
      */
     @Throws(Exception::class)
     fun inspect(file: File): OTAPayloadInfo {
         val zip = ZipFile(file)
         
-        // 1. Extract payload_properties.txt raw headers with newlines preserved
+        // 1. Extract payload_properties.txt and format strictly with Unix '\n'
         val propsEntry = zip.getEntry("payload_properties.txt")
             ?: throw IllegalStateException("payload_properties.txt not found in ZIP archive")
+        
         val rawHeaders = zip.getInputStream(propsEntry).bufferedReader().use { it.readText() }
-            .replace("\r\n", "\n")
-            .trim()
+        val cleanHeaders = rawHeaders
+            .split(Regex("[\r\n]+"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it.contains("=") }
+            .joinToString("\n")
+
+        Log.d(TAG, "Parsed clean headers:\n$cleanHeaders")
 
         // 2. Locate payload.bin entry size & byte offset
         val payloadEntry = zip.getEntry("payload.bin")
@@ -58,11 +69,22 @@ object OTAZipInspector {
 
                     val nameBytes = ByteArray(nameLen)
                     raf.readFully(nameBytes)
-                    val entryName = String(nameBytes)
+                    val entryName = String(nameBytes, Charsets.UTF_8)
 
                     if (entryName == "payload.bin") {
-                        dataOffset = currentPos + 30 + nameLen + extraLen
-                        break
+                        val candidateOffset = currentPos + 30 + nameLen + extraLen
+                        // Verify CrAU header
+                        raf.seek(candidateOffset)
+                        val magicCheck = ByteArray(4)
+                        raf.readFully(magicCheck)
+                        if (magicCheck.contentEquals(CRAU_MAGIC)) {
+                            Log.i(TAG, "Verified CrAU magic header at byte offset $candidateOffset")
+                            dataOffset = candidateOffset
+                            break
+                        } else {
+                            Log.w(TAG, "Offset $candidateOffset found for payload.bin but CrAU magic mismatch. Continuing scan...")
+                            dataOffset = candidateOffset
+                        }
                     }
                     val entry = zip.getEntry(entryName)
                     val compressedSize = entry?.compressedSize ?: -1L
@@ -75,20 +97,44 @@ object OTAZipInspector {
                     currentPos++
                 }
             }
+
+            // Fallback: If not found by entry scan, search for CrAU magic directly
+            if (dataOffset == -1L) {
+                Log.w(TAG, "Scanning file for CrAU magic signature directly...")
+                raf.seek(0)
+                val scanBuf = ByteArray(65536)
+                var bytesRead: Int
+                var filePos = 0L
+                while (raf.read(scanBuf).also { bytesRead = it } != -1 && dataOffset == -1L) {
+                    for (i in 0 until bytesRead - 4) {
+                        if (scanBuf[i] == CRAU_MAGIC[0] &&
+                            scanBuf[i + 1] == CRAU_MAGIC[1] &&
+                            scanBuf[i + 2] == CRAU_MAGIC[2] &&
+                            scanBuf[i + 3] == CRAU_MAGIC[3]
+                        ) {
+                            dataOffset = filePos + i
+                            Log.i(TAG, "Found CrAU signature directly at offset $dataOffset")
+                            break
+                        }
+                    }
+                    filePos += bytesRead - 4
+                    raf.seek(filePos)
+                }
+            }
         } finally {
             raf.close()
             zip.close()
         }
 
         if (dataOffset == -1L) {
-            throw IllegalStateException("Unable to locate Local File Header data offset for payload.bin")
+            throw IllegalStateException("Unable to locate Local File Header or CrAU magic for payload.bin")
         }
 
         return OTAPayloadInfo(
             payloadOffset = dataOffset,
             payloadSize = payloadSize,
-            headers = rawHeaders,
-            rawPropertiesText = rawHeaders
+            headers = cleanHeaders,
+            rawPropertiesText = cleanHeaders
         )
     }
 }

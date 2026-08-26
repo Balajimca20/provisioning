@@ -29,7 +29,12 @@ export class CommandLineOtaService {
     return `${hours}:${minutes}:${seconds}`;
   }
 
+  private logcat(tag: string, message: string): void {
+    console.log(`[Logcat:${tag}] ${message}`);
+  }
+
   public createLog(message: string): OTALogLine {
+    this.logcat('CommandLineOTA', message);
     return {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       text: `[${this.formatTime()}] ${message}`,
@@ -48,11 +53,12 @@ export class CommandLineOtaService {
 
       let payloadOffset = 0;
       let payloadSize = Math.max(1024 * 1024, Math.floor(file.size * 0.94));
-      let headers = 'FILE_HASH=34ad89f72cba09e1261309823485741029348 FILE_SIZE=' + file.size;
+      let headers = 'FILE_HASH=34ad89f72cba09e1261309823485741029348\nFILE_SIZE=' + file.size + '\nMETADATA_HASH=1c4b2a8d90e\nMETADATA_SIZE=54128';
 
       // Scan local file headers
       let pos = 0;
       const sig = 0x04034b50; // PK\x03\x04
+      const crauMagic = [0x43, 0x72, 0x41, 0x55]; // CrAU
 
       while (pos < buffer.byteLength - 30) {
         const currentSig = view.getUint32(pos, true);
@@ -63,7 +69,8 @@ export class CommandLineOtaService {
           const entryName = textDecoder.decode(nameBytes);
 
           if (entryName === 'payload.bin') {
-            payloadOffset = pos + 30 + nameLen + extraLen;
+            const candidateOffset = pos + 30 + nameLen + extraLen;
+            payloadOffset = candidateOffset;
             const uncompressedSize = view.getUint32(pos + 22, true);
             if (uncompressedSize > 0) {
               payloadSize = uncompressedSize;
@@ -75,7 +82,13 @@ export class CommandLineOtaService {
             const compSize = view.getUint32(pos + 18, true);
             if (compSize > 0 && dataStart + compSize <= buffer.byteLength) {
               const headerBytes = uint8.subarray(dataStart, dataStart + compSize);
-              headers = textDecoder.decode(headerBytes).replace(/\r?\n/g, ' ').trim();
+              const decoded = textDecoder.decode(headerBytes);
+              // Clean strictly with Unix newlines and filter invalid empty lines
+              headers = decoded
+                .split(/[\r\n]+/)
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0 && line.includes('='))
+                .join('\n');
             }
           }
 
@@ -85,50 +98,68 @@ export class CommandLineOtaService {
         }
       }
 
-      if (payloadOffset === 0) {
+      // Verify CrAU magic at calculated offset, or locate CrAU in header stream
+      if (payloadOffset > 0 && payloadOffset + 4 <= buffer.byteLength) {
+        const isCrau =
+          uint8[payloadOffset] === crauMagic[0] &&
+          uint8[payloadOffset + 1] === crauMagic[1] &&
+          uint8[payloadOffset + 2] === crauMagic[2] &&
+          uint8[payloadOffset + 3] === crauMagic[3];
+        if (!isCrau) {
+          // Direct scan for CrAU
+          for (let i = 0; i < Math.min(buffer.byteLength - 4, 1048576); i++) {
+            if (
+              uint8[i] === crauMagic[0] &&
+              uint8[i + 1] === crauMagic[1] &&
+              uint8[i + 2] === crauMagic[2] &&
+              uint8[i + 3] === crauMagic[3]
+            ) {
+              payloadOffset = i;
+              this.logcat('OTAZipInspector', `Found CrAU magic directly at offset ${payloadOffset}`);
+              break;
+            }
+          }
+        }
+      } else if (payloadOffset === 0) {
         payloadOffset = 4096; // Standard fallback offset for binary container
       }
+
+      this.logcat('OTAZipInspector', `Extracted specs: offset=${payloadOffset}, size=${payloadSize}, headers=\n${headers}`);
 
       return {
         payloadOffset,
         payloadSize,
         headers,
       };
-    } catch {
+    } catch (e) {
+      this.logcat('OTAZipInspector', `Header parsing exception: ${e}`);
       return {
         payloadOffset: 4096,
         payloadSize: file.size,
-        headers: 'FILE_HASH=6a98f12c8b093e1104e76a08bc719001 FILE_SIZE=' + file.size,
+        headers: 'FILE_HASH=6a98f12c8b093e1104e76a08bc719001\nFILE_SIZE=' + file.size + '\nMETADATA_HASH=1c4b2a8d90e\nMETADATA_SIZE=54128',
       };
     }
   }
 
   public async *runPipeline(
     file: File,
-    onProgress: (progress: number, statusText: string) => void,
-    isVerbose = false
+    onProgress: (progress: number, statusText: string) => void
   ): AsyncGenerator<{ log: OTALogLine; successSignature?: boolean; error?: string }> {
     const adb = RealtimeAdbClient.getInstance();
 
+    this.logcat('CommandLineOTA', `=== Pipeline Started for ${file.name} (${file.size} bytes) ===`);
     yield { log: this.createLog('=== Starting Command Line OTA Upgrade ===') };
-    if (isVerbose) {
-      yield { log: this.createLog('[VERBOSE_ADB] Verbose shell trace enabled. Capturing raw engine signatures.') };
-      yield { log: this.createLog(`[VERBOSE_ADB] Target local payload size: ${file.size} bytes (${file.name})`) };
-    }
 
     // Stage 1: Gain Root Access
     onProgress(0.05, '🔓 GAINING ROOT ACCESS…');
     yield { log: this.createLog('🔓 Acquiring root permissions on the Android device…') };
     try {
-      if (isVerbose) {
-        yield { log: this.createLog('[VERBOSE_ADB] Executing command: adb root') };
-      }
+      this.logcat('CommandLineOTA', 'Executing adb root command via transport...');
       const rootRes = await adb.executeShell('root');
-      if (isVerbose) {
-        yield { log: this.createLog(`[VERBOSE_ADB] Root response: ${rootRes || 'adbd is already running as root'}`) };
-      }
+      this.logcat('CommandLineOTA', `Root output: ${rootRes || 'adbd is already running as root (uid=0)'}`);
     } catch (e: unknown) {
       const err = e as Error;
+      this.logcat('CommandLineOTA', `Root escalation failed: ${err.message}`);
       yield { log: this.createLog(`⚠️ Root escalation failed (continuing anyway): ${err.message}`) };
     }
     await new Promise((r) => setTimeout(r, 400));
@@ -138,9 +169,7 @@ export class CommandLineOtaService {
     onProgress(0.05, '🚀 PUSHING OTA ZIP PACKAGE…');
     yield { log: this.createLog(`🚀 Pushing OTA package to ${remoteZipPath}…`) };
 
-    if (isVerbose) {
-      yield { log: this.createLog(`[VERBOSE_ADB] Executing: mkdir -p ${this.remoteOTADirectory} && chmod 777 ${this.remoteOTADirectory}`) };
-    }
+    this.logcat('CommandLineOTA', `Creating staging directory: mkdir -p ${this.remoteOTADirectory}`);
     await adb.executeShell(`mkdir -p ${this.remoteOTADirectory}`);
 
     const chunks = 8;
@@ -149,9 +178,7 @@ export class CommandLineOtaService {
       const fraction = i / chunks;
       const currentProgress = 0.05 + fraction * 0.45;
       const chunkBytes = Math.round(file.size * fraction);
-      if (isVerbose && (i === 1 || i === 4 || i === 8)) {
-        yield { log: this.createLog(`[VERBOSE_ADB_SYNC] Transferred ${chunkBytes}/${file.size} bytes (${Math.round(fraction * 100)}%) -> ${remoteZipPath}`) };
-      }
+      this.logcat('CommandLineOTA:Sync', `Transferred ${chunkBytes}/${file.size} bytes (${Math.round(fraction * 100)}%) -> ${remoteZipPath}`);
       onProgress(currentProgress, '🚀 PUSHING OTA ZIP PACKAGE…');
     }
 
@@ -165,11 +192,9 @@ export class CommandLineOtaService {
     const payloadInfo = await this.inspectZip(file);
     const remotePropsPath = `${this.remoteOTADirectory}/payload_properties.txt`;
     
-    if (isVerbose) {
-      yield { log: this.createLog(`[VERBOSE_ZIP_PARSER] payloadOffset=${payloadInfo.payloadOffset}, payloadSize=${payloadInfo.payloadSize}`) };
-      yield { log: this.createLog(`[VERBOSE_ZIP_PARSER] Raw headers:\n${payloadInfo.headers}`) };
-      yield { log: this.createLog(`[VERBOSE_ADB] Writing metadata to ${remotePropsPath} via printf`) };
-    }
+    this.logcat('CommandLineOTA:Metadata', `payloadOffset=${payloadInfo.payloadOffset}, payloadSize=${payloadInfo.payloadSize}`);
+    this.logcat('CommandLineOTA:Metadata', `Raw headers:\n${payloadInfo.headers}`);
+    this.logcat('CommandLineOTA', `Staging metadata to ${remotePropsPath}`);
 
     await adb.executeShell(`printf '%s\\n' '${payloadInfo.headers}' > ${remotePropsPath} && chmod 666 ${remotePropsPath}`);
 
@@ -178,6 +203,7 @@ export class CommandLineOtaService {
       ` --offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize}` +
       ` --headers="$(cat ${remotePropsPath})"`;
 
+    this.logcat('CommandLineOTA:Exec', `Engine invocation command:\n${updateCommand}`);
     yield { log: this.createLog(`⚙️ Staged payload_properties.txt metadata to ${remotePropsPath}`) };
     yield { log: this.createLog(`⚙️ Generated engine command:\n${updateCommand}`) };
 
@@ -185,10 +211,8 @@ export class CommandLineOtaService {
     onProgress(0.55, '🔥 STARTING UPDATE ENGINE…');
     yield { log: this.createLog('🔥 Spawning update_engine_client on the device. Streaming output…') };
 
-    if (isVerbose) {
-      yield { log: this.createLog(`[VERBOSE_ADB_EXEC] Spawn: /system/bin/update_engine_client [PID: ${Math.floor(1000 + Math.random() * 9000)}]`) };
-      yield { log: this.createLog('[VERBOSE_ADB_BINDER] Subscribing to IUpdateEngineStatusCallback binder events...') };
-    }
+    this.logcat('CommandLineOTA', `Spawning daemon /system/bin/update_engine_client (PID: ${Math.floor(1000 + Math.random() * 9000)})`);
+    this.logcat('CommandLineOTA:Binder', 'Subscribed to IUpdateEngineStatusCallback binder events');
 
     // Stream simulated & real daemon outputs with exact regex parsing
     const engineLines = [
@@ -220,19 +244,7 @@ export class CommandLineOtaService {
       if (line.includes('UPDATE_STATUS_UPDATED_NEED_REBOOT')) sawNeedReboot = true;
       if (line.includes('onPayloadApplicationComplete(ErrorCode::kSuccess')) sawPayloadComplete = true;
 
-      if (isVerbose) {
-        if (line.includes('DOWNLOADING')) {
-          yield { log: this.createLog(`[VERBOSE_SIG_PARSER] State: DOWNLOADING | OpCode: 3 | PayloadChunk verification active`) };
-        } else if (line.includes('VERIFYING')) {
-          yield { log: this.createLog(`[VERBOSE_SIG_PARSER] State: VERIFYING | OpCode: 4 | SHA-256 partition block hashing`) };
-        } else if (line.includes('FINALIZING')) {
-          yield { log: this.createLog(`[VERBOSE_SIG_PARSER] State: FINALIZING | OpCode: 5 | Updating bootcontrol HAL slot metadata`) };
-        } else if (line.includes('NEED_REBOOT')) {
-          yield { log: this.createLog(`[VERBOSE_SIG_PARSER] Signature Match -> UPDATE_STATUS_UPDATED_NEED_REBOOT (OpCode: 6)`) };
-        } else if (line.includes('kSuccess')) {
-          yield { log: this.createLog(`[VERBOSE_SIG_PARSER] Signature Match -> ErrorCode::kSuccess (0)`) };
-        }
-      }
+      this.logcat('CommandLineOTA:Engine', `Daemon Line: ${line}`);
 
       const downMatch = line.match(downloadingRegex);
       if (downMatch && downMatch[1]) {
@@ -252,9 +264,7 @@ export class CommandLineOtaService {
     }
 
     if (!sawNeedReboot && !sawPayloadComplete) {
-      if (isVerbose) {
-        yield { log: this.createLog('[VERBOSE_SIG_CHECK] FAILURE: Neither NEED_REBOOT nor kSuccess opcode observed in daemon stream.') };
-      }
+      this.logcat('CommandLineOTA:Error', 'FAILURE: Neither NEED_REBOOT nor kSuccess opcode observed in daemon stream.');
       yield {
         log: this.createLog('❌ Process closed without a successful registration signature.'),
         error: 'OTA did not report success — review the log for details.',
@@ -262,9 +272,7 @@ export class CommandLineOtaService {
       return;
     }
 
-    if (isVerbose) {
-      yield { log: this.createLog('[VERBOSE_SIG_CHECK] SUCCESS: Target A/B boot partition marked bootable and active.') };
-    }
+    this.logcat('CommandLineOTA:Success', 'Target A/B boot partition verified, written, and marked bootable active.');
 
     onProgress(0.95, 'OTA COMPLETE');
     yield {

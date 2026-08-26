@@ -2,6 +2,7 @@ package com.royalenfield.provisioning.feature.ota.presentation
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.royalenfield.provisioning.core.adb.AdbClient
@@ -37,7 +38,6 @@ data class CommandLineOtaUiState(
     val progress: Double = 0.0,
     val statusText: String = "WAITING FOR DEVICE & ZIP PACKAGE…",
     val isRunning: Boolean = false,
-    val isVerboseMode: Boolean = true,
     val rebootConsentRequested: Boolean = false,
     val resultAlertMessage: String? = null
 )
@@ -134,14 +134,6 @@ class CommandLineOTAViewModel(
         _uiState.value = _uiState.value.copy(resultAlertMessage = null)
     }
 
-    fun toggleVerboseMode() {
-        _uiState.value = _uiState.value.copy(isVerboseMode = !_uiState.value.isVerboseMode)
-    }
-
-    fun setVerboseMode(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(isVerboseMode = enabled)
-    }
-
     // MARK: - Pipeline Execution
 
     fun startPipeline() {
@@ -167,10 +159,7 @@ class CommandLineOTAViewModel(
 
     private suspend fun runPipeline(localZipFile: File): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         log("=== Starting Command Line OTA Upgrade ===")
-        if (_uiState.value.isVerboseMode) {
-            log("[VERBOSE_ADB] Verbose shell trace enabled. Capturing raw engine signatures.")
-            log("[VERBOSE_ADB] Target local payload size: ${localZipFile.length()} bytes (${localZipFile.name})")
-        }
+        Log.i(TAG, "Payload target: ${localZipFile.name}, size: ${localZipFile.length()} bytes")
 
         _uiState.value = _uiState.value.copy(
             statusText = "🔓 GAINING ROOT ACCESS…",
@@ -181,8 +170,9 @@ class CommandLineOTAViewModel(
         val rootResult = adbClient.restartAsRoot()
         if (rootResult is AdbResult.Failure && !rootResult.message.contains("already running as root", ignoreCase = true)) {
             log("⚠️ Root escalation failed (continuing anyway): ${rootResult.message}")
-        } else if (_uiState.value.isVerboseMode) {
-            log("[VERBOSE_ADB] Root state verified: adbd is running as root (uid=0)")
+            Log.w(TAG, "Root escalation warning: ${rootResult.message}")
+        } else {
+            Log.d(TAG, "Device root state verified: adbd is running as root (uid=0)")
         }
 
         val remoteZipPath = "$remoteOTADirectory/update.zip"
@@ -190,6 +180,7 @@ class CommandLineOTAViewModel(
         log("🚀 Checking and staging OTA package to $remoteZipPath…")
 
         // Ensure remote directory exists
+        Log.d(TAG, "Executing: mkdir -p $remoteOTADirectory && chmod 777 $remoteOTADirectory")
         adbClient.runShell("mkdir -p $remoteOTADirectory && chmod 777 $remoteOTADirectory")
 
         // Check if file is already on device with identical size to avoid re-pushing 1GB over slow socket
@@ -199,8 +190,10 @@ class CommandLineOTAViewModel(
 
         if (alreadyStaged) {
             log("⚡ Package already staged on device ($localSize bytes). Skipping redundant transfer.")
+            Log.i(TAG, "Package cache hit on target device: $remoteZipPath matches size $localSize")
             _uiState.value = _uiState.value.copy(progress = 0.5)
         } else {
+            Log.i(TAG, "Beginning file transfer of $localSize bytes -> $remoteZipPath")
             val startTime = System.currentTimeMillis()
             val pushResult = adbClient.pushFile(localZipFile, remoteZipPath) { sent, total ->
                 val fraction = if (total > 0) sent.toDouble() / total.toDouble() else 0.0
@@ -214,8 +207,10 @@ class CommandLineOTAViewModel(
 
             if (pushResult is AdbResult.Failure) {
                 log("⚠️ Push notification: ${pushResult.message} (Verifying destination...)")
+                Log.w(TAG, "Push issue: ${pushResult.message}")
             } else {
                 log("✅ Staged $localSize bytes in ${elapsedSec}s ($speedMb MB/s).")
+                Log.i(TAG, "Staging completed in ${elapsedSec}s ($speedMb MB/s)")
             }
             _uiState.value = _uiState.value.copy(progress = 0.5)
         }
@@ -225,8 +220,11 @@ class CommandLineOTAViewModel(
         val payloadInfo: OTAPayloadInfo
         try {
             payloadInfo = OTAZipInspector.inspect(localZipFile)
+            Log.d(TAG, "Extracted payload specs: offset=${payloadInfo.payloadOffset}, size=${payloadInfo.payloadSize}")
+            Log.d(TAG, "Raw headers:\n${payloadInfo.headers}")
         } catch (e: Exception) {
             log("❌ ZIP header extraction failed: ${e.localizedMessage}")
+            Log.e(TAG, "ZIP header extraction failed", e)
             return@withContext Pair(false, "Couldn't read the OTA package: ${e.localizedMessage}")
         }
 
@@ -236,13 +234,16 @@ class CommandLineOTAViewModel(
         log("⚙️ Staging payload properties metadata (size: ${payloadInfo.payloadSize}, offset: ${payloadInfo.payloadOffset})…")
         
         // Write properties directly to remote staging path
-        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && chmod 666 $remotePropsPath"
+        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && tr -d '\\r' < $remotePropsPath > ${remotePropsPath}.tmp && mv ${remotePropsPath}.tmp $remotePropsPath && chmod 666 $remotePropsPath"
+        Log.d(TAG, "Staging properties file command: $writePropsCmd")
         adbClient.runShell(writePropsCmd)
 
-        val updateCommand = "update_engine_client --update --follow --payload=file://$remoteZipPath" +
+        val updateCommand = "UE_BIN=\$(which update_engine_client_android 2>/dev/null || which update_engine_client 2>/dev/null || echo update_engine_client_android); " +
+                "\$UE_BIN --update --follow --payload=file://$remoteZipPath" +
                 " --offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize}" +
-                " --headers=\"\$(cat $remotePropsPath)\""
+                " --headers=\"\$(cat $remotePropsPath | tr -d '\\r')\""
         log("⚙️ Generated engine command:\n$updateCommand")
+        Log.i(TAG, "Spawn engine command: $updateCommand")
 
         _uiState.value = _uiState.value.copy(
             statusText = "🔥 STARTING UPDATE ENGINE…",
@@ -255,9 +256,9 @@ class CommandLineOTAViewModel(
         adbClient.runShell("chcon -R u:object_r:ota_package_file:s0 $remoteOTADirectory || true")
         adbClient.runShell("chmod -R 777 $remoteOTADirectory || true")
         // 2. Clear any lingering stale update state
-        adbClient.runShell("update_engine_client --cancel || true")
+        adbClient.runShell("update_engine_client_android --cancel || update_engine_client --cancel || true")
 
-        log("🔥 Spawning update_engine_client on the device. Streaming output…")
+        log("🔥 Spawning update_engine daemon on the device. Streaming output…")
 
         var sawNeedRebootSignature = false
         var sawPayloadCompleteSignature = false
@@ -297,7 +298,7 @@ class CommandLineOTAViewModel(
                 delay(1000)
                 pollAttempts++
 
-                val statusRes = adbClient.runShell("update_engine_client --status")
+                val statusRes = adbClient.runShell("which update_engine_client_android >/dev/null 2>&1 && update_engine_client_android --status || update_engine_client --status")
                 if (statusRes is AdbResult.Success) {
                     val statusOut = statusRes.data.trim()
                     if (statusOut.isNotEmpty()) {
@@ -407,6 +408,7 @@ class CommandLineOTAViewModel(
     }
 
     private fun log(message: String) {
+        Log.d(TAG, message)
         val timestamp = timeFormatter.format(Date())
         val newLine = OTALogLine(text = "[$timestamp] $message")
         _uiState.value = _uiState.value.copy(
@@ -415,6 +417,7 @@ class CommandLineOTAViewModel(
     }
 
     companion object {
+        private const val TAG = "CommandLineOTA"
         private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.US)
         private val downloadingPattern = Pattern.compile("""UPDATE_STATUS_DOWNLOADING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
         private val verifyingPattern = Pattern.compile("""UPDATE_STATUS_VERIFYING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
