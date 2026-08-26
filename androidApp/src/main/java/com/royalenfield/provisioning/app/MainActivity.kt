@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +33,9 @@ import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScree
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.OtaScreen
 import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
+import com.royalenfield.provisioning.feature.provisioning.presentation.ProvisioningRoute
+import com.royalenfield.provisioning.feature.provisioning.presentation.ProvisioningScreen
+
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedScreen
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalScreen
@@ -53,13 +55,16 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Ota : Screen("ota", "OTA Flash", Icons.Default.SystemUpdateAlt)
     object SupplierFeed : Screen("supplier_feed", "Supplier", Icons.Default.DeviceHub)
     object Terminal : Screen("terminal", "ADB Shell", Icons.Default.Terminal)
+
+    object SystemProvisioning : Screen("system_provisioning", "Provisioning", Icons.Default.FlashOn)
 }
 
 val serviceNavItems = listOf(
     Screen.Wifi,
     Screen.Ota,
     Screen.SupplierFeed,
-    Screen.Terminal
+//    Screen.Terminal,
+    Screen.SystemProvisioning
 )
 
 class MainActivity : ComponentActivity() {
@@ -148,7 +153,7 @@ fun MainAppContent() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Landing.route,
+            startDestination = Screen.SystemProvisioning.route,
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Landing.route) {
@@ -202,6 +207,10 @@ fun MainAppContent() {
             composable(Screen.Terminal.route) {
                 val viewModel: TerminalViewModel = koinViewModel()
                 TerminalScreen(viewModel = viewModel)
+            }
+
+            composable(Screen.SystemProvisioning.route) {
+                ProvisioningRoute()
             }
         }
 

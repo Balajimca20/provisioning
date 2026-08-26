@@ -43,7 +43,7 @@ class KtorClientFactory(
                         android.util.Log.d("KtorClient", message)
                     }
                 }
-                level = LogLevel.INFO
+                level = LogLevel.ALL
             }
 
             defaultRequest {
