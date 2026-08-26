@@ -120,18 +120,50 @@ class AdbClient(
             }
         }
 
-    suspend fun push(localFile: File, remotePath: String): AdbResult<Boolean> =
-        withContext(Dispatchers.IO) {
-            val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
-            try {
-                Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath")
-                dadb.push(localFile, remotePath)
-                AdbResult.Success(true)
-            } catch (e: Exception) {
-                Log.e(TAG, "Push failed: ${e.message}", e)
-                AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
+    suspend fun restartAsRoot(): AdbResult<String> = withContext(Dispatchers.IO) {
+        val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
+        try {
+            Log.d(TAG, "Escalating root permissions...")
+            val rootRes = runShell("root")
+            if (rootRes is AdbResult.Success) {
+                return@withContext rootRes
             }
+            // Check if already root via whoami or id -u
+            val whoamiRes = runShell("whoami || id -u")
+            if (whoamiRes is AdbResult.Success && (whoamiRes.data.contains("root") || whoamiRes.data.trim() == "0")) {
+                return@withContext AdbResult.Success("adbd is running as root")
+            }
+            // Non-blocking escalation warning
+            AdbResult.Success("Root escalation attempted (${(rootRes as? AdbResult.Failure)?.message ?: "status ok"})")
+        } catch (e: Exception) {
+            Log.w(TAG, "Root escalation error (non-fatal): ${e.message}")
+            AdbResult.Success("Root escalation skipped: ${e.message}")
         }
+    }
+
+    suspend fun reboot(): AdbResult<String> = runShell("reboot")
+
+    suspend fun pushFile(
+        localFile: File,
+        remotePath: String,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null
+    ): AdbResult<Boolean> = withContext(Dispatchers.IO) {
+        val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
+        try {
+            Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath")
+            val totalBytes = localFile.length()
+            onProgress?.invoke(0L, totalBytes)
+            dadb.push(localFile, remotePath)
+            onProgress?.invoke(totalBytes, totalBytes)
+            AdbResult.Success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push failed: ${e.message}", e)
+            AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
+        }
+    }
+
+    suspend fun push(localFile: File, remotePath: String): AdbResult<Boolean> =
+        pushFile(localFile, remotePath, null)
 
     fun disconnect() {
         try {

@@ -20,6 +20,7 @@ import {
 import { OtaPackage, OtaState } from '../types';
 import { RealtimeAdbClient } from '../lib/realtimeAdbClient';
 import { OtaRepositoryClient } from '../lib/otaRepositoryClient';
+import { CommandLineOtaView } from './CommandLineOtaView';
 
 let logCounter = 0;
 const generateLogId = (prefix = 'log') => `${prefix}-${Date.now()}-${++logCounter}-${Math.random().toString(36).substring(2, 7)}`;
@@ -28,7 +29,8 @@ interface OtaViewProps {
   onQuickReboot: () => void;
 }
 
-export const OtaView: React.FC<OtaViewProps> = () => {
+export const OtaView: React.FC<OtaViewProps> = ({ onQuickReboot }) => {
+  const [activeTab, setActiveTab] = useState<'commandline' | 'telemetry'>('commandline');
   const [packages, setPackages] = useState<OtaPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<OtaPackage | null>(null);
   const [manifestUrl, setManifestUrl] = useState<string>('http://192.168.1.1:8080/ota/manifest.json');
@@ -311,6 +313,48 @@ export const OtaView: React.FC<OtaViewProps> = () => {
 
   return (
     <div className="space-y-6">
+      {/* Mode Switcher Bar */}
+      <div className="flex items-center justify-between bg-stone-900 border border-stone-800 rounded-xl p-2">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setActiveTab('commandline')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              activeTab === 'commandline'
+                ? 'bg-[#00D2B4] text-black shadow-md shadow-[#00D2B4]/20'
+                : 'text-stone-400 hover:text-white hover:bg-stone-800'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Command Line OTA (Live Engine)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('telemetry')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+              activeTab === 'telemetry'
+                ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                : 'text-stone-400 hover:text-white hover:bg-stone-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Telemetry & Manifest Flash</span>
+          </button>
+        </div>
+
+        <div className="hidden md:flex items-center space-x-3 px-3 text-xs font-mono text-stone-400">
+          <div className="flex items-center space-x-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{clusterInfo.activeSlot}</span>
+          </div>
+          <span>•</span>
+          <span>{clusterInfo.installedVersion}</span>
+        </div>
+      </div>
+
+      {activeTab === 'commandline' ? (
+        <CommandLineOtaView onQuickReboot={onQuickReboot} />
+      ) : (
+        <>
       {/* Hidden File Input for Real Firmware Images */}
       <input
         ref={fileInputRef}
@@ -689,6 +733,8 @@ export const OtaView: React.FC<OtaViewProps> = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

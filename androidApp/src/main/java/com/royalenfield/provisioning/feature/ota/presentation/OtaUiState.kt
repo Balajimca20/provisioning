@@ -5,7 +5,7 @@ import com.royalenfield.provisioning.feature.ota.data.OtaPackage
 data class OtaUiState(
     val availablePackages: List<OtaPackage> = emptyList(),
     val selectedPackage: OtaPackage? = null,
-    val currentInstalledVersion: String = "RE_HIM450_V2.1.0_REL",
+    val currentInstalledVersion: String = "Querying...",
     val pipelineStage: String = "IDLE", 
     val progressPercent: Int = 0,
     val stageStatusText: String = "Ready to deploy firmware",
