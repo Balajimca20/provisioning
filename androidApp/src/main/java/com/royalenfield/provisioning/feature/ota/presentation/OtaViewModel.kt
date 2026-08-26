@@ -1,5 +1,6 @@
 package com.royalenfield.provisioning.feature.ota.presentation
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.royalenfield.provisioning.core.adb.AdbClient
@@ -61,6 +62,36 @@ class OtaViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    fun onLocalFileSelected(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(stageStatusText = "Ingesting local firmware zip...") }
+            
+            // In a production app, we would use a ContentResolver to read the zip and extract OtaPackage metadata.
+            // For this UI requirement, we simulate the ingestion of the local build.
+            val localPackage = OtaPackage(
+                id = "local_${System.currentTimeMillis()}",
+                vehicleModel = "CUSTOM / LOCAL",
+                targetVersion = "LOCAL_BUILD_${uri.lastPathSegment?.take(8) ?: "EXT"}",
+                sizeBytes = 0,
+                sizeDisplay = "Local File",
+                sha256 = "verify-on-push",
+                releaseDate = "N/A",
+                notes = "User-selected firmware: ${uri.path}"
+            )
+            
+            _uiState.update { 
+                val newList = it.availablePackages.toMutableList()
+                newList.add(0, localPackage)
+                it.copy(
+                    availablePackages = newList,
+                    selectedPackage = localPackage,
+                    stageStatusText = "Local firmware loaded."
+                )
+            }
         }
     }
 

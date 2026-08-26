@@ -26,15 +26,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.royalenfield.provisioning.BuildConfig
 import com.royalenfield.provisioning.core.config.EnvironmentConfig
-import com.royalenfield.provisioning.core.theme.DarkBackground
-import com.royalenfield.provisioning.core.theme.DarkSurface
-import com.royalenfield.provisioning.core.theme.DarkSurfaceVariant
-import com.royalenfield.provisioning.core.theme.FfMechanicTheme
-import com.royalenfield.provisioning.core.theme.RedPrimary
-import com.royalenfield.provisioning.core.theme.TextPrimary
-import com.royalenfield.provisioning.core.theme.TextSecondary
-import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardScreen
+import com.royalenfield.provisioning.core.theme.*
+import com.royalenfield.provisioning.feature.dashboard.presentation.AdbSetupScreen
+import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardFunctionalScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
+import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScreen
+import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.OtaScreen
 import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedScreen
@@ -45,16 +42,20 @@ import com.royalenfield.provisioning.feature.wifi.presentation.WifiScreen
 import com.royalenfield.provisioning.feature.wifi.presentation.WifiViewModel
 import org.koin.androidx.compose.koinViewModel
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
+sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
+    object Landing : Screen("landing", "Welcome")
+    object WifiSetup : Screen("wifi_setup", "Wi-Fi Setup")
+    object AdbSetup : Screen("adb_setup", "ADB Setup")
+    
+    // Core functional screens
+    object Dashboard : Screen("dashboard", "Stats", Icons.Default.Dashboard)
     object Wifi : Screen("wifi", "SoftAP", Icons.Default.Wifi)
     object Ota : Screen("ota", "OTA Flash", Icons.Default.SystemUpdateAlt)
     object SupplierFeed : Screen("supplier_feed", "Supplier", Icons.Default.DeviceHub)
     object Terminal : Screen("terminal", "ADB Shell", Icons.Default.Terminal)
 }
 
-val navItems = listOf(
-    Screen.Dashboard,
+val serviceNavItems = listOf(
     Screen.Wifi,
     Screen.Ota,
     Screen.SupplierFeed,
@@ -79,6 +80,10 @@ fun MainAppContent() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showVariantDialog by remember { mutableStateOf(false) }
+    
+    // Shared Connectivity State
+    val dashboardViewModel: DashboardViewModel = koinViewModel()
+    val uiState by dashboardViewModel.uiState.collectAsState()
 
     val env = EnvironmentConfig.current
 
@@ -88,100 +93,94 @@ fun MainAppContent() {
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "FF PROVISIONING",
-                            color = RedPrimary,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 15.sp,
-                            letterSpacing = 1.sp
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(imageVector = Icons.Default.TwoWheeler, contentDescription = null, tint = RedPrimary)
+                        Text(text = "FF PROVISIONING", color = RedPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
                     }
                 },
                 actions = {
-                    // Interactive Build Variant Badge
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = env.badgeBackground,
-                        modifier = Modifier
-                            .padding(end = 12.dp)
-                            .clickable { showVariantDialog = true }
+                        modifier = Modifier.padding(end = 12.dp).clickable { showVariantDialog = true }
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(env.badgeColor, shape = RoundedCornerShape(3.dp))
-                            )
-                            Text(
-                                text = EnvironmentConfig.formattedVariantDisplay,
-                                color = env.badgeColor,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
+                        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(modifier = Modifier.size(6.dp).background(env.badgeColor, shape = RoundedCornerShape(3.dp)))
+                            Text(text = EnvironmentConfig.formattedVariantDisplay, color = env.badgeColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkSurface
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = DarkSurface
-            ) {
-                navItems.forEach { screen ->
-                    val selected = currentRoute == screen.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            // Navigation bar only shown when ADB is linked and we are out of setup
+            val isSetupScreen = currentRoute == Screen.Landing.route || 
+                              currentRoute == Screen.WifiSetup.route || 
+                              currentRoute == Screen.AdbSetup.route
+            if (uiState.isAdbConnected && !isSetupScreen) {
+                NavigationBar(containerColor = DarkSurface) {
+                    serviceNavItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(imageVector = screen.icon, contentDescription = screen.title)
-                        },
-                        label = {
-                            Text(screen.title)
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = TextPrimary,
-                            selectedTextColor = RedPrimary,
-                            indicatorColor = RedPrimary.copy(alpha = 0.25f),
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
+                            },
+                            icon = { Icon(imageVector = screen.icon!!, contentDescription = screen.title) },
+                            label = { Text(screen.title) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = TextPrimary,
+                                selectedTextColor = RedPrimary,
+                                indicatorColor = RedPrimary.copy(alpha = 0.25f),
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Dashboard.route,
+            startDestination = Screen.Landing.route,
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable(Screen.Landing.route) {
+                LandingScreen(onStartSetup = { navController.navigate(Screen.WifiSetup.route) })
+            }
+
+            composable(Screen.WifiSetup.route) {
+                WifiSetupScreen(
+                    viewModel = dashboardViewModel,
+                    onWifiConnected = {
+                        navController.navigate(Screen.AdbSetup.route)
+                    }
+                )
+            }
+
+            composable(Screen.AdbSetup.route) {
+                AdbSetupScreen(
+                    viewModel = dashboardViewModel,
+                    onAdbConnected = {
+                        // After bridge established, move to dashboard and clear setup flow
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Landing.route) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             composable(Screen.Dashboard.route) {
-                val viewModel: DashboardViewModel = koinViewModel()
-                DashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToWifi = { navController.navigate(Screen.Wifi.route) },
-                    onNavigateToOta = { navController.navigate(Screen.Ota.route) },
-                    onNavigateToSupplierFeed = { navController.navigate(Screen.SupplierFeed.route) }
+                DashboardFunctionalScreen(
+                    viewModel = dashboardViewModel,
+                    onNavigateToModule = { route -> navController.navigate(route) }
                 )
             }
 
@@ -210,34 +209,16 @@ fun MainAppContent() {
             AlertDialog(
                 onDismissRequest = { showVariantDialog = false },
                 containerColor = DarkSurface,
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = env.badgeColor)
-                        Text(text = "Build Variant Details", color = TextPrimary, fontSize = 16.sp)
-                    }
-                },
+                title = { Text(text = "Build Variant Details", color = TextPrimary, fontSize = 16.sp) },
                 text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        VariantInfoRow("Environment", "${env.title} (${env.badgeText})")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        VariantInfoRow("Environment", env.title)
                         VariantInfoRow("Build Type", BuildConfig.BUILD_TYPE)
                         VariantInfoRow("Flavor", BuildConfig.BUILD_VARIANT)
-                        VariantInfoRow("API Base URL", EnvironmentConfig.ffBaseUrl.ifEmpty { "https://api.ffmechanic.royalenfield.com" })
-                        VariantInfoRow("Provision URL", EnvironmentConfig.provisionBaseUrl.ifEmpty { "https://provision.tripper.royalenfield.com" })
-                        VariantInfoRow("Mock Fallbacks", if (EnvironmentConfig.isMockFallbackAllowed) "ENABLED" else "DISABLED (STRICT)")
-                        VariantInfoRow("Debug Logging", if (EnvironmentConfig.isDebugLoggingEnabled) "ENABLED" else "DISABLED")
+                        VariantInfoRow("API Base URL", EnvironmentConfig.ffBaseUrl)
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showVariantDialog = false }) {
-                        Text("Close", color = RedPrimary)
-                    }
-                }
+                confirmButton = { TextButton(onClick = { showVariantDialog = false }) { Text("Close", color = RedPrimary) } }
             )
         }
     }
@@ -247,13 +228,7 @@ fun MainAppContent() {
 private fun VariantInfoRow(label: String, value: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = label, color = TextSecondary, fontSize = 11.sp)
-        Text(
-            text = value,
-            color = TextPrimary,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.SemiBold
-        )
-        Divider(color = DarkSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(text = value, color = TextPrimary, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        HorizontalDivider(color = DarkSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
     }
 }

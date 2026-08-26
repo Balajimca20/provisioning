@@ -1,5 +1,8 @@
 package com.royalenfield.provisioning.feature.ota.presentation
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.royalenfield.provisioning.core.theme.*
@@ -29,6 +33,12 @@ fun OtaScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        viewModel.onLocalFileSelected(uri)
+    }
 
     Column(
         modifier = Modifier
@@ -81,26 +91,38 @@ fun OtaScreen(
             }
         }
 
-        // Available OTA Packages Header with Refresh
+        // Available OTA Packages Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "AVAILABLE FIRMWARE PACKAGES",
+                text = "AVAILABLE FIRMWARE BUILDS",
                 style = MaterialTheme.typography.labelMedium,
-                color = TextMuted,
+                color = TextPrimary,
+                fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp
             )
-            IconButton(
-                onClick = { viewModel.loadPackages() }
+            
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = Color.Transparent
             ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Query OTA Repository",
-                    tint = AmberAccent
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${uiState.availablePackages.size}",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Loaded",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
 
@@ -111,38 +133,78 @@ fun OtaScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CloudDownload,
+                        imageVector = Icons.Default.Description,
                         contentDescription = null,
                         tint = TextMuted,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                     Text(
-                        text = "No packages retrieved from repository",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        text = "No firmware builds loaded",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Querying live vehicle/OEM gateway at ${com.royalenfield.provisioning.core.config.EnvironmentConfig.ffBaseUrl}/api/v1/ota/packages",
+                        text = "Query the gateway or select a local .zip package to begin.",
                         color = TextMuted,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
                     Button(
-                        onClick = { viewModel.loadPackages() },
-                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
-                        shape = RoundedCornerShape(8.dp)
+                        onClick = { filePickerLauncher.launch("application/zip") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, RedPrimary)
                     ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = AmberAccent)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Query Repository Gateway", color = AmberAccent, fontSize = 12.sp)
+                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, tint = RedPrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Select Firmware File (.zip)", color = RedPrimary, fontWeight = FontWeight.Bold)
                     }
+
+                    TextButton(
+                        onClick = { viewModel.loadPackages() }
+                    ) {
+                        Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, tint = AmberAccent)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Query Repository Gateway", color = AmberAccent)
+                    }
+                }
+            }
+        } else {
+            // Action buttons when list is not empty
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { filePickerLauncher.launch("application/zip") },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = TextPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Load Local", color = TextPrimary, fontSize = 12.sp)
+                }
+                
+                Button(
+                    onClick = { viewModel.loadPackages() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = AmberAccent)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Refresh Gateway", color = AmberAccent, fontSize = 12.sp)
                 }
             }
         }
@@ -177,11 +239,11 @@ fun OtaScreen(
                         )
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = AmberAccent.copy(alpha = 0.2f)
+                            color = if (pkg.vehicleModel.contains("LOCAL")) PurpleAccent.copy(alpha = 0.2f) else AmberAccent.copy(alpha = 0.2f)
                         ) {
                             Text(
                                 text = pkg.sizeDisplay,
-                                color = AmberAccent,
+                                color = if (pkg.vehicleModel.contains("LOCAL")) PurpleAccent else AmberAccent,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

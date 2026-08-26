@@ -11,24 +11,25 @@ class AdbKeyPairProvider(
 
     @Synchronized
     fun getKeyPair(): AdbKeyPair {
-        cachedKeyPair?.let { return it }
+        val cached = cachedKeyPair
+        if (cached != null) return cached
 
         val keyFile = File(context.filesDir, "adbkey")
         val pubFile = File(context.filesDir, "adbkey.pub")
 
-        val keyPair = if (keyFile.exists() && pubFile.exists()) {
-            try {
-                AdbKeyPair.read(keyFile, pubFile)
-            } catch (e: Exception) {
-                keyFile.delete()
-                pubFile.delete()
+        val keyPair: AdbKeyPair = try {
+            if (!keyFile.exists() || !pubFile.exists()) {
                 AdbKeyPair.generate(keyFile, pubFile)
             }
-        } else {
+            AdbKeyPair.read(keyFile, pubFile)
+        } catch (e: Exception) {
+            keyFile.delete()
+            pubFile.delete()
             AdbKeyPair.generate(keyFile, pubFile)
+            AdbKeyPair.read(keyFile, pubFile)
         }
 
-        cachedKeyPair = keyPair as AdbKeyPair?
+        cachedKeyPair = keyPair
         return keyPair
     }
 }

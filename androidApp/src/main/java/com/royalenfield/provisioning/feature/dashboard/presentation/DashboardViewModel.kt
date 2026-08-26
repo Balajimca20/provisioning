@@ -74,6 +74,10 @@ class DashboardViewModel(
         }
     }
 
+    fun startSetup() {
+        _uiState.update { it.copy(isSetupStarted = true) }
+    }
+
     fun onSsidChanged(newSsid: String) {
         val sanitized = SsidValidator.sanitize(newSsid)
         _uiState.update { it.copy(ssidInput = sanitized) }

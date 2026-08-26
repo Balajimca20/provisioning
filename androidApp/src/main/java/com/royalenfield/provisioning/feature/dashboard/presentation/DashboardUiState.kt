@@ -1,6 +1,8 @@
 package com.royalenfield.provisioning.feature.dashboard.presentation
 
 data class DashboardUiState(
+    val isSetupStarted: Boolean = false,
+    
     // Step 1: Wi-Fi Connection
     val ssidInput: String = "RE_LXHD_250925",
     val passwordInput: String = "RoyalEnfield@2025",
