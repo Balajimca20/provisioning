@@ -11,6 +11,8 @@ import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardVie
 import com.royalenfield.provisioning.feature.ota.data.OtaRepository
 import com.royalenfield.provisioning.feature.ota.domain.OtaPipeline
 import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
+import com.royalenfield.provisioning.feature.provisioning.data.repository.ProvisioningRepository
+import com.royalenfield.provisioning.feature.provisioning.presentation.ProvisioningViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.data.SupplierFeedRepository
 import com.royalenfield.provisioning.feature.supplierfeed.domain.FetchTelemetryUseCase
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
@@ -49,6 +51,7 @@ val repositoryModule = module {
     single { WifiChangeLogRepository(androidContext()) }
     single { OtaRepository(httpClient = get(), adbClient = get()) }
     single { SupplierFeedRepository(graphQLClient = get(), httpClient = get()) }
+    single { ProvisioningRepository(get()) }
 }
 
 val domainModule = module {
@@ -93,6 +96,8 @@ val viewModelModule = module {
             adbClient = get()
         )
     }
+
+    viewModel { ProvisioningViewModel(get()) }
 }
 
 val appModules = listOf(
