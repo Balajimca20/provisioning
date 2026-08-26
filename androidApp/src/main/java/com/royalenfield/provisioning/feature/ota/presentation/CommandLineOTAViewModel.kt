@@ -11,18 +11,22 @@ import com.royalenfield.provisioning.feature.ota.domain.OTAPayloadInfo
 import com.royalenfield.provisioning.feature.ota.domain.OTAZipInspector
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.regex.Pattern
+import java.util.zip.CRC32
 
 data class OTALogLine(
     val id: String = UUID.randomUUID().toString(),
@@ -160,6 +164,14 @@ class CommandLineOTAViewModel(
     private suspend fun runPipeline(localZipFile: File): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         log("=== Starting Command Line OTA Upgrade ===")
         Log.i(TAG, "Payload target: ${localZipFile.name}, size: ${localZipFile.length()} bytes")
+
+        // 1. Perform checksum synchronously in the coroutine
+        log("🔍 Calculating local package CRC32 checksum…")
+        val checksum = withContext(Dispatchers.Default) {
+            convertFileToChecksum(localZipFile.absolutePath)
+        }
+        log("🔍 Calculated CRC32 Checksum: $checksum (0x${checksum.toString(16).uppercase(Locale.US)})")
+        Log.i(TAG, "Package CRC32: $checksum (0x${checksum.toString(16).uppercase(Locale.US)})")
 
         _uiState.value = _uiState.value.copy(
             statusText = "🔓 GAINING ROOT ACCESS…",
@@ -418,6 +430,7 @@ class CommandLineOTAViewModel(
 
     companion object {
         private const val TAG = "CommandLineOTA"
+        private const val OTA_CHECKSUM_SIZE = 32 * 1024 // 32KB buffer for optimal I/O throughput
         private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.US)
         private val downloadingPattern = Pattern.compile("""UPDATE_STATUS_DOWNLOADING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
         private val verifyingPattern = Pattern.compile("""UPDATE_STATUS_VERIFYING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
@@ -428,6 +441,43 @@ class CommandLineOTAViewModel(
             return if (matcher.find()) {
                 matcher.group(1)?.toDoubleOrNull()
             } else null
+        }
+
+        fun convertFileToChecksum(filePath: String): Long {
+            // 1. Basic validation
+            if (filePath.isBlank()) {
+                Log.e(TAG, "CRC_CALC :: Path is blank")
+                return 0L
+            }
+
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e(TAG, "CRC_CALC :: File not found: $filePath")
+                return 0L
+            }
+
+            val crc = CRC32()
+
+            return try {
+                // 2. Open stream and wrap in BufferedInputStream for speed
+                // .use {} automatically closes the stream even if an error occurs
+                FileInputStream(file).use { fis ->
+                    val bis = BufferedInputStream(fis)
+                    // 32KB buffer is the sweet spot for modern mobile storage (UFS)
+                    val buffer = ByteArray(OTA_CHECKSUM_SIZE)
+                    var bytesRead: Int
+
+                    while (bis.read(buffer).also { bytesRead = it } != -1) {
+                        // Update CRC with the actual number of bytes read
+                        crc.update(buffer, 0, bytesRead)
+                    }
+                }
+                // 3. Return the final calculated value
+                crc.value
+            } catch (e: Exception) {
+                Log.e(TAG, "CRC_CALC :: Error calculating CRC: ${e.message}", e)
+                0L
+            }
         }
     }
 }

@@ -76,8 +76,8 @@
 
 ### New Files Created
 ```
-✅ androidApp/src/main/java/com/royalenfield/provisioning/core/validation/SsidValidator.kt
-✅ androidApp/src/main/java/com/royalenfield/provisioning/core/network/VehicleNetworkConnectionHelper.kt
+✅ app/src/main/java/com/royalenfield/provisioning/core/validation/SsidValidator.kt
+✅ app/src/main/java/com/royalenfield/provisioning/core/network/VehicleNetworkConnectionHelper.kt
 ✅ IMPLEMENTATION_GUIDE.md
 ✅ TESTING_GUIDE.md
 ✅ IMPLEMENTATION_SUMMARY.md
@@ -87,17 +87,17 @@
 
 ### Files Modified
 ```
-✅ androidApp/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardViewModel.kt
-✅ androidApp/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardScreen.kt
-✅ androidApp/src/main/AndroidManifest.xml
+✅ app/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardViewModel.kt
+✅ app/src/main/java/com/royalenfield/provisioning/feature/dashboard/presentation/DashboardScreen.kt
+✅ app/src/main/AndroidManifest.xml
 ```
 
 ### Files Unchanged (Already Implemented)
 ```
-✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbClient.kt
-✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbKeyPairProvider.kt
-✅ androidApp/src/main/java/com/royalenfield/provisioning/core/adb/AdbManager.kt
-✅ androidApp/build.gradle.kts
+✅ app/src/main/java/com/royalenfield/provisioning/core/adb/AdbClient.kt
+✅ app/src/main/java/com/royalenfield/provisioning/core/adb/AdbKeyPairProvider.kt
+✅ app/src/main/java/com/royalenfield/provisioning/core/adb/AdbManager.kt
+✅ app/build.gradle.kts
 ```
 
 ---
@@ -157,12 +157,12 @@ when (result) {
 
 ### Run Unit Tests
 ```bash
-./gradlew :androidApp:testProdDebugUnitTest
+./gradlew :app:testProdDebugUnitTest
 ```
 
 ### Run Integration Tests
 ```bash
-./gradlew :androidApp:connectedProdDebugAndroidTest
+./gradlew :app:connectedProdDebugAndroidTest
 ```
 
 ### Manual Testing
@@ -190,7 +190,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md) for detailed scenarios.
 
 ### Verify Build
 ```bash
-./gradlew :androidApp:compileProdDebugKotlin --no-daemon
+./gradlew :app:compileProdDebugKotlin --no-daemon
 ```
 
 ---
@@ -397,8 +397,8 @@ Project Root
 - [ ] Review QUICK_REFERENCE.md for code examples
 - [ ] Read IMPLEMENTATION_GUIDE.md for architecture
 - [ ] Study TESTING_GUIDE.md for test scenarios
-- [ ] Run unit tests: `./gradlew :androidApp:testProdDebugUnitTest`
-- [ ] Build app: `./gradlew :androidApp:assembleProdDebug`
+- [ ] Run unit tests: `./gradlew :app:testProdDebugUnitTest`
+- [ ] Build app: `./gradlew :app:assembleProdDebug`
 - [ ] Install on device: `adb install <path-to-apk>`
 - [ ] Test Wi-Fi connection flow
 - [ ] Test ADB connection flow
@@ -462,10 +462,10 @@ adb shell dumpsys connectivity | grep "Process binding"
 ### Common Commands
 ```bash
 # Build
-./gradlew :androidApp:compileProdDebugKotlin
+./gradlew :app:compileProdDebugKotlin
 
 # Install
-adb install -r androidApp/build/outputs/apk/prod/debug/androidApp-prod-debug.apk
+adb install -r app/build/outputs/apk/prod/debug/app-prod-debug.apk
 
 # Clear logs
 adb logcat -c

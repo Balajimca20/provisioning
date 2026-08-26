@@ -11,6 +11,40 @@ export interface OTAPayloadInfo {
   headers: string;
 }
 
+// 32KB buffer CRC32 table for fast checksum calculation
+function makeCRCTable(): Uint32Array {
+  let c: number;
+  const crcTable = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crcTable[n] = c;
+  }
+  return crcTable;
+}
+
+const CRC_TABLE = makeCRCTable();
+
+export async function convertFileToChecksum(file: File): Promise<number> {
+  const chunkSize = 32 * 1024; // 32KB buffer size
+  let crc = 0 ^ (-1);
+  let offset = 0;
+
+  while (offset < file.size) {
+    const slice = file.slice(offset, Math.min(offset + chunkSize, file.size));
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) {
+      crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ bytes[i]) & 0xff];
+    }
+    offset += chunkSize;
+  }
+
+  return (crc ^ (-1)) >>> 0;
+}
+
 export class CommandLineOtaService {
   private static instance: CommandLineOtaService;
   private readonly remoteOTADirectory = '/data/ota_package';
@@ -143,6 +177,13 @@ export class CommandLineOtaService {
     this.logcat('CommandLineOTA', `=== Pipeline Started for ${file.name} (${file.size} bytes) ===`);
     yield { log: this.createLog('=== Starting Command Line OTA Upgrade ===') };
 
+    // Perform CRC32 checksum calculation
+    yield { log: this.createLog('🔍 Calculating local package CRC32 checksum…') };
+    const checksum = await convertFileToChecksum(file);
+    const hexChecksum = checksum.toString(16).toUpperCase().padStart(8, '0');
+    yield { log: this.createLog(`🔍 Calculated CRC32 Checksum: ${checksum} (0x${hexChecksum})`) };
+    this.logcat('CommandLineOTA', `Local package CRC32: ${checksum} (0x${hexChecksum})`);
+
     // Stage 1: Gain Root Access
     onProgress(0.05, '🔓 GAINING ROOT ACCESS…');
     yield { log: this.createLog('🔓 Acquiring root permissions on the Android device…') };
@@ -189,7 +230,7 @@ export class CommandLineOtaService {
 
     // Stage 3: Analyze Package & Extract Properties
     onProgress(0.5, '⚙️ ANALYZING PACKAGE…');
-    yield { log: this.createLog('⚙️ Extracting payload specs and properties from archive…') };
+    yield { log: this.createLog('⚙️ Extracting payload specs from the ZIP header…') };
 
     let payloadInfo: OTAPayloadInfo;
     try {

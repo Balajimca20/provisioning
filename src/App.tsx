@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { WifiView } from './components/WifiView';
@@ -40,6 +40,17 @@ export const App: React.FC = () => {
   const [isRebooting, setIsRebooting] = useState(false);
   const [rebootFinished, setRebootFinished] = useState(false);
 
+  // Automatically navigate to Wifi or ADB screen whenever disconnected based on status
+  useEffect(() => {
+    if (wifiState.status === 'disconnected') {
+      setActiveTab('wifi');
+    } else if (wifiState.status === 'connected' && (adbState.status === 'disconnected' || adbState.status === 'error')) {
+      if (activeTab === 'ota' || activeTab === 'terminal' || activeTab === 'supplier') {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [wifiState.status, adbState.status, activeTab]);
+
   const handleConnectWifi = async (ssid: string, password?: string) => {
     setWifiState({
       status: 'connecting',
@@ -64,6 +75,11 @@ export const App: React.FC = () => {
       status: 'disconnected',
       ssid: '',
     });
+    setAdbState((prev) => ({
+      ...prev,
+      status: 'disconnected',
+    }));
+    setActiveTab('wifi');
   };
 
   const handleConnectAdb = async (host: string, port: number) => {
@@ -97,6 +113,7 @@ export const App: React.FC = () => {
       ...prev,
       status: 'disconnected',
     }));
+    setActiveTab('dashboard');
   };
 
   const handleTriggerReboot = async () => {
