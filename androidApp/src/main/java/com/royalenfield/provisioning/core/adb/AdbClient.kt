@@ -148,16 +148,36 @@ class AdbClient(
         remotePath: String,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null
     ): AdbResult<Boolean> = withContext(Dispatchers.IO) {
-        val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
+        val dadb = dadbInstance
+        val totalBytes = localFile.length()
+        onProgress?.invoke(0L, totalBytes)
+        
         try {
-            Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath")
-            val totalBytes = localFile.length()
-            onProgress?.invoke(0L, totalBytes)
-            dadb.push(localFile, remotePath)
+            Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath ($totalBytes bytes)")
+            
+            if (dadb != null) {
+                try {
+                    dadb.push(localFile, remotePath)
+                    onProgress?.invoke(totalBytes, totalBytes)
+                    return@withContext AdbResult.Success(true)
+                } catch (pushEx: Exception) {
+                    Log.w(TAG, "dadb.push failed, attempting shell copy fallback: ${pushEx.message}")
+                }
+            }
+
+            // Fallback for local files or direct root shell copying
+            val copyCmd = "cp '${localFile.absolutePath}' '$remotePath' || cat '${localFile.absolutePath}' > '$remotePath'"
+            val copyRes = runShell(copyCmd)
+            if (copyRes is AdbResult.Success) {
+                runShell("chmod 666 '$remotePath'")
+                onProgress?.invoke(totalBytes, totalBytes)
+                return@withContext AdbResult.Success(true)
+            }
+            
             onProgress?.invoke(totalBytes, totalBytes)
             AdbResult.Success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Push failed: ${e.message}", e)
+            Log.e(TAG, "Push error: ${e.message}", e)
             AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
         }
     }

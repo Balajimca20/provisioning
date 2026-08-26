@@ -200,6 +200,7 @@ class OtaViewModel(
                         }
                     }
                     is OtaProgress.Failed -> {
+                        addLog("❌ Deployment error: ${progress.reason}")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "FAILED",

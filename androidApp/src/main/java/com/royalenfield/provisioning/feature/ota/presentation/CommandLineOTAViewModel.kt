@@ -221,8 +221,15 @@ class CommandLineOTAViewModel(
             adbClient.runShellStreaming(shellCommand).collect { line ->
                 val cleanLine = line.trim()
                 if (cleanLine.isNotEmpty()) {
-                    if (cleanLine.contains("UPDATE_STATUS_UPDATED_NEED_REBOOT")) sawNeedRebootSignature = true
-                    if (cleanLine.contains("onPayloadApplicationComplete(ErrorCode::kSuccess")) sawPayloadCompleteSignature = true
+                    if (cleanLine.contains("UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) ||
+                        cleanLine.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
+                        cleanLine.contains("Update succeeded", ignoreCase = true)) {
+                        sawNeedRebootSignature = true
+                    }
+                    if (cleanLine.contains("onPayloadApplicationComplete(ErrorCode::kSuccess", ignoreCase = true) ||
+                        cleanLine.contains("ErrorCode::kSuccess", ignoreCase = true)) {
+                        sawPayloadCompleteSignature = true
+                    }
                     handleEngineLine(cleanLine)
                 }
             }
