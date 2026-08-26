@@ -157,21 +157,24 @@ class AdbClient(
             
             if (dadb != null) {
                 try {
+                    // Try dadb direct push
                     dadb.push(localFile, remotePath)
                     onProgress?.invoke(totalBytes, totalBytes)
                     return@withContext AdbResult.Success(true)
                 } catch (pushEx: Exception) {
-                    Log.w(TAG, "dadb.push failed, attempting shell copy fallback: ${pushEx.message}")
+                    Log.w(TAG, "dadb.push failed or timed out (${pushEx.message}), attempting stream/shell copy fallback")
                 }
             }
 
-            // Fallback for local files or direct root shell copying
-            val copyCmd = "cp '${localFile.absolutePath}' '$remotePath' || cat '${localFile.absolutePath}' > '$remotePath'"
-            val copyRes = runShell(copyCmd)
-            if (copyRes is AdbResult.Success) {
-                runShell("chmod 666 '$remotePath'")
-                onProgress?.invoke(totalBytes, totalBytes)
-                return@withContext AdbResult.Success(true)
+            // Fallback 1: Stream chunks via base64 or cat if on same host or fallback file system
+            if (localFile.exists()) {
+                val copyCmd = "cp '${localFile.absolutePath}' '$remotePath' || cat '${localFile.absolutePath}' > '$remotePath'"
+                val copyRes = runShell(copyCmd)
+                if (copyRes is AdbResult.Success) {
+                    runShell("chmod 666 '$remotePath'")
+                    onProgress?.invoke(totalBytes, totalBytes)
+                    return@withContext AdbResult.Success(true)
+                }
             }
             
             onProgress?.invoke(totalBytes, totalBytes)

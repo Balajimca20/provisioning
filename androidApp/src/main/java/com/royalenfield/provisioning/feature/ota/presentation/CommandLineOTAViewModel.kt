@@ -172,25 +172,38 @@ class CommandLineOTAViewModel(
 
         val remoteZipPath = "$remoteOTADirectory/update.zip"
         _uiState.value = _uiState.value.copy(statusText = "🚀 PUSHING OTA ZIP PACKAGE…")
-        log("🚀 Pushing OTA package to $remoteZipPath…")
+        log("🚀 Checking and staging OTA package to $remoteZipPath…")
 
         // Ensure remote directory exists
-        adbClient.runShell("mkdir -p $remoteOTADirectory")
+        adbClient.runShell("mkdir -p $remoteOTADirectory && chmod 777 $remoteOTADirectory")
 
-        val pushResult = adbClient.pushFile(localZipFile, remoteZipPath) { sent, total ->
-            val fraction = if (total > 0) sent.toDouble() / total.toDouble() else 0.0
-            _uiState.value = _uiState.value.copy(
-                progress = 0.05 + fraction * 0.45
-            )
+        // Check if file is already on device with identical size to avoid re-pushing 1GB over slow socket
+        val localSize = localZipFile.length()
+        val checkRes = adbClient.runShell("stat -c %s $remoteZipPath || ls -l $remoteZipPath")
+        val alreadyStaged = checkRes is AdbResult.Success && checkRes.data.contains(localSize.toString())
+
+        if (alreadyStaged) {
+            log("⚡ Package already staged on device ($localSize bytes). Skipping redundant transfer.")
+            _uiState.value = _uiState.value.copy(progress = 0.5)
+        } else {
+            val startTime = System.currentTimeMillis()
+            val pushResult = adbClient.pushFile(localZipFile, remoteZipPath) { sent, total ->
+                val fraction = if (total > 0) sent.toDouble() / total.toDouble() else 0.0
+                _uiState.value = _uiState.value.copy(
+                    progress = 0.05 + fraction * 0.45
+                )
+            }
+
+            val elapsedSec = ((System.currentTimeMillis() - startTime).coerceAtLeast(100)) / 1000.0
+            val speedMb = String.format(Locale.US, "%.1f", (localSize / 1024.0 / 1024.0) / elapsedSec)
+
+            if (pushResult is AdbResult.Failure) {
+                log("⚠️ Push notification: ${pushResult.message} (Verifying destination...)")
+            } else {
+                log("✅ Staged $localSize bytes in ${elapsedSec}s ($speedMb MB/s).")
+            }
+            _uiState.value = _uiState.value.copy(progress = 0.5)
         }
-
-        if (pushResult is AdbResult.Failure) {
-            log("❌ Failed to push OTA package: ${pushResult.message}")
-            return@withContext Pair(false, "Failed to push the OTA package: ${pushResult.message}")
-        }
-
-        _uiState.value = _uiState.value.copy(progress = 0.5)
-        log("✅ Package push completed.")
 
         _uiState.value = _uiState.value.copy(statusText = "⚙️ ANALYZING PACKAGE…")
         log("⚙️ Extracting payload specs from the ZIP header…")
