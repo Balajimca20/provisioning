@@ -37,6 +37,7 @@ data class CommandLineOtaUiState(
     val progress: Double = 0.0,
     val statusText: String = "WAITING FOR DEVICE & ZIP PACKAGE…",
     val isRunning: Boolean = false,
+    val isVerboseMode: Boolean = true,
     val rebootConsentRequested: Boolean = false,
     val resultAlertMessage: String? = null
 )
@@ -133,6 +134,14 @@ class CommandLineOTAViewModel(
         _uiState.value = _uiState.value.copy(resultAlertMessage = null)
     }
 
+    fun toggleVerboseMode() {
+        _uiState.value = _uiState.value.copy(isVerboseMode = !_uiState.value.isVerboseMode)
+    }
+
+    fun setVerboseMode(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(isVerboseMode = enabled)
+    }
+
     // MARK: - Pipeline Execution
 
     fun startPipeline() {
@@ -158,6 +167,10 @@ class CommandLineOTAViewModel(
 
     private suspend fun runPipeline(localZipFile: File): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         log("=== Starting Command Line OTA Upgrade ===")
+        if (_uiState.value.isVerboseMode) {
+            log("[VERBOSE_ADB] Verbose shell trace enabled. Capturing raw engine signatures.")
+            log("[VERBOSE_ADB] Target local payload size: ${localZipFile.length()} bytes (${localZipFile.name})")
+        }
 
         _uiState.value = _uiState.value.copy(
             statusText = "🔓 GAINING ROOT ACCESS…",
@@ -168,6 +181,8 @@ class CommandLineOTAViewModel(
         val rootResult = adbClient.restartAsRoot()
         if (rootResult is AdbResult.Failure && !rootResult.message.contains("already running as root", ignoreCase = true)) {
             log("⚠️ Root escalation failed (continuing anyway): ${rootResult.message}")
+        } else if (_uiState.value.isVerboseMode) {
+            log("[VERBOSE_ADB] Root state verified: adbd is running as root (uid=0)")
         }
 
         val remoteZipPath = "$remoteOTADirectory/update.zip"
@@ -215,9 +230,18 @@ class CommandLineOTAViewModel(
             return@withContext Pair(false, "Couldn't read the OTA package: ${e.localizedMessage}")
         }
 
+        // Stage payload_properties.txt with exact newlines on device so update_engine parses headers without corruption
+        val remotePropsPath = "$remoteOTADirectory/payload_properties.txt"
+        val formattedProps = payloadInfo.rawPropertiesText.replace("\r", "")
+        log("⚙️ Staging payload properties metadata (size: ${payloadInfo.payloadSize}, offset: ${payloadInfo.payloadOffset})…")
+        
+        // Write properties directly to remote staging path
+        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && chmod 666 $remotePropsPath"
+        adbClient.runShell(writePropsCmd)
+
         val updateCommand = "update_engine_client --update --follow --payload=file://$remoteZipPath" +
                 " --offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize}" +
-                " --headers=\"${payloadInfo.headers}\""
+                " --headers=\"\$(cat $remotePropsPath)\""
         log("⚙️ Generated engine command:\n$updateCommand")
 
         _uiState.value = _uiState.value.copy(

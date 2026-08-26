@@ -124,18 +124,23 @@ class OtaPipeline(
             } ?: OTAPayloadInfo(
                 payloadOffset = 4096L,
                 payloadSize = workFile.length(),
-                headers = "FILE_HASH=34ad89f72cba09e1261309823485741029348 FILE_SIZE=${workFile.length()}"
+                headers = "FILE_HASH=34ad89f72cba09e1261309823485741029348\nFILE_SIZE=${workFile.length()}"
             )
             
             emit(OtaProgress.Log("⚙️ payload_offset: ${payloadInfo.payloadOffset}"))
             emit(OtaProgress.Log("⚙️ payload_size: ${payloadInfo.payloadSize}"))
             emit(OtaProgress.Log("✅ Technical parameters extracted from ZIP header."))
 
+            // Stage properties file with preserved newlines
+            val remoteProps = "/data/ota_package/payload_properties.txt"
+            val formattedProps = payloadInfo.rawPropertiesText.replace("\r", "")
+            adbClient.runShell("printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remoteProps && chmod 666 $remoteProps")
+
             // Step 5: Execute Update Engine via ADB streaming
             val updateCmd = "update_engine_client --update --follow " +
                     "--payload=file://$remotePath " +
                     "--offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize} " +
-                    "--headers=\"${payloadInfo.headers}\""
+                    "--headers=\"\$(cat $remoteProps)\""
             
             emit(OtaProgress.Log("[CMD] cd /data/ota_package"))
             emit(OtaProgress.Log("[CMD] Spawning update_engine_client daemon..."))

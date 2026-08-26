@@ -164,6 +164,27 @@ fun CommandLineOTAView(
                     )
                 }
 
+                // Verbose Mode Toggle Button
+                OutlinedButton(
+                    onClick = { viewModel.toggleVerboseMode() },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (uiState.isVerboseMode) FFTerminalGreen else FFNeutralTwo
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(
+                            if (uiState.isVerboseMode) FFTerminalGreen.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.15f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (uiState.isVerboseMode) "Verbose: ON" else "Verbose: OFF",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
                 if (uiState.selectedFileName != null) {
                     Column(
                         modifier = Modifier.weight(1f),

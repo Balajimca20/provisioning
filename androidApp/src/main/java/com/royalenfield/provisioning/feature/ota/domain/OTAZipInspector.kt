@@ -7,7 +7,8 @@ import java.util.zip.ZipFile
 data class OTAPayloadInfo(
     val payloadOffset: Long,
     val payloadSize: Long,
-    val headers: String
+    val headers: String,
+    val rawPropertiesText: String = headers
 )
 
 object OTAZipInspector {
@@ -19,12 +20,11 @@ object OTAZipInspector {
     fun inspect(file: File): OTAPayloadInfo {
         val zip = ZipFile(file)
         
-        // 1. Extract payload_properties.txt headers
+        // 1. Extract payload_properties.txt raw headers with newlines preserved
         val propsEntry = zip.getEntry("payload_properties.txt")
             ?: throw IllegalStateException("payload_properties.txt not found in ZIP archive")
-        val headers = zip.getInputStream(propsEntry).bufferedReader().use { it.readText() }
-            .replace("\r\n", " ")
-            .replace("\n", " ")
+        val rawHeaders = zip.getInputStream(propsEntry).bufferedReader().use { it.readText() }
+            .replace("\r\n", "\n")
             .trim()
 
         // 2. Locate payload.bin entry size & byte offset
@@ -87,7 +87,9 @@ object OTAZipInspector {
         return OTAPayloadInfo(
             payloadOffset = dataOffset,
             payloadSize = payloadSize,
-            headers = headers
+            headers = rawHeaders,
+            rawPropertiesText = rawHeaders
         )
     }
 }
+
