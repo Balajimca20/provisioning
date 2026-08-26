@@ -1,9 +1,9 @@
 package com.royalenfield.provisioning.feature.ota.presentation
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.royalenfield.provisioning.core.adb.AdbClient
 import com.royalenfield.provisioning.feature.ota.data.OtaPackage
 import com.royalenfield.provisioning.feature.ota.data.OtaRepository
 import com.royalenfield.provisioning.feature.ota.domain.OtaPipeline
@@ -13,15 +13,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.*
 
 class OtaViewModel(
+    private val context: Context,
     private val otaPipeline: OtaPipeline,
-    private val otaRepository: OtaRepository,
-    private val adbClient: AdbClient
+    private val otaRepository: OtaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OtaUiState())
     val uiState: StateFlow<OtaUiState> = _uiState.asStateFlow()
+
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private var selectedLocalFileUri: Uri? = null
 
     init {
         loadPackages()
@@ -67,17 +74,22 @@ class OtaViewModel(
 
     fun onLocalFileSelected(uri: Uri?) {
         if (uri == null) return
+        selectedLocalFileUri = uri
         viewModelScope.launch {
             _uiState.update { it.copy(stageStatusText = "Ingesting local firmware zip...") }
             
-            // In a production app, we would use a ContentResolver to read the zip and extract OtaPackage metadata.
-            // For this UI requirement, we simulate the ingestion of the local build.
+            // Try to get the actual file size
+            var fileSize: Long = 0
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                fileSize = it.length
+            }
+
             val localPackage = OtaPackage(
                 id = "local_${System.currentTimeMillis()}",
                 vehicleModel = "CUSTOM / LOCAL",
                 targetVersion = "LOCAL_BUILD_${uri.lastPathSegment?.take(8) ?: "EXT"}",
-                sizeBytes = 0,
-                sizeDisplay = "Local File",
+                sizeBytes = fileSize,
+                sizeDisplay = if (fileSize > 0) "${fileSize / 1024 / 1024} MB" else "Local File",
                 sha256 = "verify-on-push",
                 releaseDate = "N/A",
                 notes = "User-selected firmware: ${uri.path}"
@@ -97,6 +109,9 @@ class OtaViewModel(
 
     fun onSelectPackage(pkg: OtaPackage) {
         _uiState.update { it.copy(selectedPackage = pkg) }
+        if (!pkg.id.startsWith("local")) {
+            selectedLocalFileUri = null
+        }
     }
 
     fun startOtaPipeline() {
@@ -105,25 +120,35 @@ class OtaViewModel(
             _uiState.update {
                 it.copy(
                     pipelineStage = "PRECHECK",
-                    progressPercent = 5,
-                    stageStatusText = "Executing pre-flight checks (battery, storage, boot partition)...",
-                    terminalLogs = listOf("[START] Initiating OTA Deployment for ${pkg.targetVersion}"),
+                    progressPercent = 0,
+                    stageStatusText = "Initializing binary stream...",
+                    terminalLogs = emptyList(),
                     errorMessage = null
                 )
             }
+            addLog("$ ota-deploy --target ${pkg.targetVersion} --verbose")
 
-            otaPipeline.runPipeline(pkg).collect { progress ->
+            // Resolve local file if needed
+            val localFile = if (pkg.id.startsWith("local") && selectedLocalFileUri != null) {
+                copyUriToTempFile(selectedLocalFileUri!!)
+            } else {
+                null
+            }
+
+            otaPipeline.runPipeline(pkg, localFile).collect { progress ->
                 when (progress) {
+                    is OtaProgress.Log -> addLog(progress.message)
                     is OtaProgress.PreCheck -> {
-                        addLog("[PRECHECK] Battery >= 50% OK, Free space >= 1.0GB OK")
-                        _uiState.update { it.copy(pipelineStage = "DOWNLOADING", progressPercent = 10) }
+                        _uiState.update { it.copy(pipelineStage = "PRECHECK", progressPercent = 5) }
                     }
                     is OtaProgress.Downloading -> {
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "DOWNLOADING",
                                 progressPercent = progress.percent,
-                                stageStatusText = "Downloading ${pkg.targetVersion} (${progress.percent}% - ${progress.bytesTransferred / 1024 / 1024}MB / ${progress.totalBytes / 1024 / 1024}MB)"
+                                currentMb = progress.bytesTransferred / 1024 / 1024,
+                                totalMb = progress.totalBytes / 1024 / 1024,
+                                stageStatusText = "DOWNLOADING: ${progress.percent}%"
                             )
                         }
                     }
@@ -132,7 +157,8 @@ class OtaViewModel(
                             it.copy(
                                 pipelineStage = "PUSHING",
                                 progressPercent = progress.percent,
-                                stageStatusText = "ADB pushing update.zip to vehicle /data/ota/ (${progress.percent}%)"
+                                transferSpeedMbps = progress.speedMbps,
+                                stageStatusText = "TRANSFERRING: ${progress.percent}%"
                             )
                         }
                     }
@@ -141,11 +167,8 @@ class OtaViewModel(
                             it.copy(
                                 pipelineStage = "VERIFYING",
                                 progressPercent = progress.percent,
-                                stageStatusText = "Verifying SHA-256 integrity hash..."
+                                stageStatusText = "VERIFYING: ${progress.percent}%"
                             )
-                        }
-                        if (progress.sha256Matched) {
-                            addLog("[VERIFY] SHA-256 checksum matched: ${pkg.sha256}")
                         }
                     }
                     is OtaProgress.FlashingPartition -> {
@@ -153,17 +176,17 @@ class OtaViewModel(
                             it.copy(
                                 pipelineStage = "FLASHING",
                                 progressPercent = progress.percent,
-                                stageStatusText = "Flashing recovery payload to ${progress.currentSlot} (${progress.percent}%)"
+                                activePartition = progress.currentSlot,
+                                stageStatusText = "FLASHING ${progress.currentSlot.uppercase()}: ${progress.percent}%"
                             )
                         }
                     }
                     is OtaProgress.AwaitingReboot -> {
-                        addLog("[FLASH] Flash completed successfully! Ready for reboot verification.")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "AWAITING_REBOOT",
                                 progressPercent = 100,
-                                stageStatusText = "Firmware written! Tap 'Reboot & Verify' to switch active partition."
+                                stageStatusText = "STAGED: PENDING REBOOT"
                             )
                         }
                     }
@@ -171,47 +194,64 @@ class OtaViewModel(
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "COMPLETE",
-                                stageStatusText = "Deployment Completed! Active Version: ${pkg.targetVersion}",
+                                stageStatusText = "DEPLOYMENT SUCCESSFUL",
                                 currentInstalledVersion = pkg.targetVersion
                             )
                         }
                     }
                     is OtaProgress.Failed -> {
-                        addLog("[ERROR] Pipeline aborted: ${progress.reason}")
                         _uiState.update {
                             it.copy(
                                 pipelineStage = "FAILED",
                                 errorMessage = progress.reason,
-                                stageStatusText = "Pipeline Failed"
+                                stageStatusText = "DEPLOYMENT FAILED"
                             )
                         }
                     }
                 }
             }
+            
+            // Cleanup temp file
+            localFile?.delete()
+        }
+    }
+
+    private fun copyUriToTempFile(uri: Uri): File? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val tempFile = File(context.cacheDir, "update_staging.zip")
+            FileOutputStream(tempFile).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+            tempFile
+        } catch (e: Exception) {
+            null
         }
     }
 
     fun confirmReboot() {
         val targetVer = _uiState.value.selectedPackage?.targetVersion ?: "RE_UPDATED_V2.2.0"
         viewModelScope.launch {
-            addLog("[REBOOT] Sending ADB reboot signal to vehicle cluster...")
+            addLog("[CMD] executing sys-reboot...")
             otaPipeline.executeRebootAndVerify()
             _uiState.update {
                 it.copy(
                     pipelineStage = "COMPLETE",
-                    stageStatusText = "Vehicle successfully rebooted with firmware $targetVer",
+                    stageStatusText = "REBOOTING...",
                     currentInstalledVersion = targetVer
                 )
             }
-            addLog("[SUCCESS] Cluster booted into new active slot!")
+            addLog("[DONE] terminal signal lost. (vehicle rebooting)")
         }
     }
 
     private fun addLog(log: String) {
         _uiState.update {
             val updated = it.terminalLogs.toMutableList()
-            updated.add(log)
+            updated.add("[${timestamp()}] $log")
             it.copy(terminalLogs = updated)
         }
     }
+
+    private fun timestamp(): String = timeFormat.format(Date())
 }

@@ -1,10 +1,15 @@
 package com.royalenfield.provisioning.core.adb
 
 import android.util.Log
+import dadb.AdbShellPacket
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 sealed class AdbResult<out T> {
     data class Success<out T>(val data: T) : AdbResult<T>()
@@ -48,6 +53,57 @@ class AdbClient(
         } catch (e: Exception) {
             Log.e(TAG, "Shell execution error: ${e.message}", e)
             AdbResult.Failure(e.message ?: "Shell command execution failed", e)
+        }
+    }
+
+    fun runShellStreaming(command: String): Flow<String> = callbackFlow {
+        val dadb = dadbInstance
+        if (dadb == null) {
+            trySend("ERROR: ADB not connected")
+            close()
+            return@callbackFlow
+        }
+
+        val session = withContext(Dispatchers.IO) {
+            dadb.openShell(command)
+        }
+
+        val readerThread = Thread {
+            try {
+                loop@ while (true) {
+                    when (val packet = session.read()) {
+                        is AdbShellPacket.StdOut -> {
+                            emitLines("", packet.payload) { trySend(it) }
+                        }
+                        is AdbShellPacket.StdError -> {
+                            emitLines("ERR: ", packet.payload) { trySend(it) }
+                        }
+                        is AdbShellPacket.Exit -> {
+                            break@loop
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                trySend("STREAM_ERROR: ${e.message}")
+            } finally {
+                try {
+                    session.close()
+                } catch (e: Exception) {
+                    // Ignore
+                }
+                close()
+            }
+        }
+        readerThread.start()
+
+        awaitClose {
+            // Thread finishes when session closes or command ends
+        }
+    }
+
+    private inline fun emitLines(prefix: String, payload: ByteArray, send: (String) -> Unit) {
+        String(payload, StandardCharsets.UTF_8).split("\n").forEach { line ->
+            if (line.isNotBlank()) send("$prefix${line.trim()}")
         }
     }
 

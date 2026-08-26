@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -114,7 +115,7 @@ fun TerminalScreen(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(48.dp)
             ) {
-                Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = Color.Black)
+                Icon(imageVector = Icons.AutoMirrored.Default.Send, contentDescription = null, tint = Color.Black)
             }
         }
     }

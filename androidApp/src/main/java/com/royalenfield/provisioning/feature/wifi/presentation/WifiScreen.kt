@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -309,7 +310,7 @@ fun WifiScreen(
                                 color = TextMuted,
                                 fontSize = 10.sp
                             )
-                            Divider(modifier = Modifier.padding(top = 6.dp), color = DarkSurfaceVariant)
+                            HorizontalDivider(modifier = Modifier.padding(top = 6.dp), color = DarkSurfaceVariant)
                         }
                     }
                 }

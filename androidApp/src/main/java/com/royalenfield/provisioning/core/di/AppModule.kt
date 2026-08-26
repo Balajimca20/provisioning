@@ -79,9 +79,9 @@ val viewModelModule = module {
 
     viewModel {
         OtaViewModel(
+            context = androidContext(),
             otaPipeline = get(),
-            otaRepository = get(),
-            adbClient = get()
+            otaRepository = get()
         )
     }
 
