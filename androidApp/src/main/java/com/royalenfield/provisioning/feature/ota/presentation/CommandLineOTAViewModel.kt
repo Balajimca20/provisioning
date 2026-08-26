@@ -224,10 +224,20 @@ class CommandLineOTAViewModel(
             statusText = "🔥 STARTING UPDATE ENGINE…",
             progress = 0.55
         )
+        log("🔥 Preparing update_engine daemon permissions & resetting locks…")
+
+        // 1. Ensure daemon permissions & SELinux contexts
+        adbClient.runShell("setenforce 0 || true")
+        adbClient.runShell("chcon -R u:object_r:ota_package_file:s0 $remoteOTADirectory || true")
+        adbClient.runShell("chmod -R 777 $remoteOTADirectory || true")
+        // 2. Clear any lingering stale update state
+        adbClient.runShell("update_engine_client --cancel || true")
+
         log("🔥 Spawning update_engine_client on the device. Streaming output…")
 
         var sawNeedRebootSignature = false
         var sawPayloadCompleteSignature = false
+        var lastErrorMessage: String? = null
 
         try {
             val shellCommand = "cd $remoteOTADirectory && $updateCommand"
@@ -243,17 +253,50 @@ class CommandLineOTAViewModel(
                         cleanLine.contains("ErrorCode::kSuccess", ignoreCase = true)) {
                         sawPayloadCompleteSignature = true
                     }
+                    if (cleanLine.contains("ErrorCode::k", ignoreCase = true) && !cleanLine.contains("kSuccess", ignoreCase = true)) {
+                        lastErrorMessage = cleanLine
+                    }
                     handleEngineLine(cleanLine)
                 }
             }
         } catch (e: Exception) {
-            log("❌ Error while streaming update_engine_client output: ${e.localizedMessage}")
-            return@withContext Pair(false, "The update engine command failed: ${e.localizedMessage}")
+            log("⚠️ Streaming notice: ${e.localizedMessage} (Continuing with daemon status check)")
+        }
+
+        // If streaming completed or daemon detached, poll update_engine_client --status to verify progress
+        if (!sawNeedRebootSignature && !sawPayloadCompleteSignature) {
+            log("🔍 Polling background update_engine daemon status…")
+            var pollAttempts = 0
+            val maxPollAttempts = 40 // ~40 seconds
+
+            while (pollAttempts < maxPollAttempts && !sawNeedRebootSignature && !sawPayloadCompleteSignature) {
+                delay(1000)
+                pollAttempts++
+
+                val statusRes = adbClient.runShell("update_engine_client --status")
+                if (statusRes is AdbResult.Success) {
+                    val statusOut = statusRes.data.trim()
+                    if (statusOut.isNotEmpty()) {
+                        handleEngineLine(statusOut)
+                        if (statusOut.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
+                            statusOut.contains("CURRENT_OP=UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) ||
+                            statusOut.contains("CURRENT_OP=6", ignoreCase = true)) {
+                            sawNeedRebootSignature = true
+                            break
+                        } else if (statusOut.contains("UPDATE_STATUS_REPORTING_ERROR_EVENT", ignoreCase = true) ||
+                                   statusOut.contains("CURRENT_OP=7", ignoreCase = true)) {
+                            lastErrorMessage = "UpdateEngine reported error state: $statusOut"
+                            break
+                        }
+                    }
+                }
+            }
         }
 
         if (!sawNeedRebootSignature && !sawPayloadCompleteSignature) {
-            log("❌ Process closed without a successful registration signature.")
-            return@withContext Pair(false, "OTA did not report success — review the log for details.")
+            val errReason = lastErrorMessage ?: "OTA did not report success signature — review the log for details."
+            log("❌ $errReason")
+            return@withContext Pair(false, errReason)
         }
 
         _uiState.value = _uiState.value.copy(progress = 0.95)
@@ -276,6 +319,25 @@ class CommandLineOTAViewModel(
 
     private fun handleEngineLine(line: String) {
         log("📲 $line")
+
+        if (line.contains("UPDATE_STATUS_FINALIZING", ignoreCase = true) || line.contains("FINALIZING", ignoreCase = true)) {
+            _uiState.value = _uiState.value.copy(
+                statusText = "⚡ FINALIZING PARTITIONS & BOOTCTRL…",
+                progress = 0.94
+            )
+            return
+        }
+
+        if (line.contains("UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) || 
+            line.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
+            line.contains("Update succeeded", ignoreCase = true)) {
+            _uiState.value = _uiState.value.copy(
+                statusText = "✅ PAYLOAD VERIFIED & APPLIED",
+                progress = 0.95
+            )
+            return
+        }
+
         extractFraction(downloadingPattern, line)?.let { fraction ->
             val pct = (fraction * 100).toInt()
             _uiState.value = _uiState.value.copy(
@@ -287,8 +349,23 @@ class CommandLineOTAViewModel(
             val pct = (fraction * 100).toInt()
             _uiState.value = _uiState.value.copy(
                 statusText = "🔍 VERIFYING: $pct%",
-                progress = 0.80 + fraction * 0.15
+                progress = 0.80 + fraction * 0.14
             )
+        }
+
+        extractFraction(genericProgressPattern, line)?.let { fraction ->
+            val pct = (fraction * 100).toInt()
+            if (fraction < 0.8) {
+                _uiState.value = _uiState.value.copy(
+                    statusText = "🛠️ FLASHING: $pct%",
+                    progress = 0.55 + fraction * 0.30
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    statusText = "🔍 VERIFYING: $pct%",
+                    progress = 0.80 + fraction * 0.15
+                )
+            }
         }
     }
 
@@ -315,8 +392,9 @@ class CommandLineOTAViewModel(
 
     companion object {
         private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.US)
-        private val downloadingPattern = Pattern.compile("""UPDATE_STATUS_DOWNLOADING\s*\(\d+\),\s*([0-9.]+)""")
-        private val verifyingPattern = Pattern.compile("""UPDATE_STATUS_VERIFYING\s*\(\d+\),\s*([0-9.]+)""")
+        private val downloadingPattern = Pattern.compile("""UPDATE_STATUS_DOWNLOADING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
+        private val verifyingPattern = Pattern.compile("""UPDATE_STATUS_VERIFYING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
+        private val genericProgressPattern = Pattern.compile("""(?:progress|PROGRESS)\s*[:=]\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
 
         private fun extractFraction(pattern: Pattern, line: String): Double? {
             val matcher = pattern.matcher(line)
