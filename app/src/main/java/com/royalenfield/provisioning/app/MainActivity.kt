@@ -32,6 +32,8 @@ import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardFun
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
 import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
+import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
+import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAViewModel
 import com.royalenfield.provisioning.feature.ota.presentation.OtaScreen
 import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedScreen
@@ -211,8 +213,8 @@ fun MainAppContent() {
             }
 
             composable(Screen.Ota.route) {
-                val viewModel: OtaViewModel = koinViewModel()
-                OtaScreen(viewModel = viewModel)
+                val viewModel: CommandLineOTAViewModel = koinViewModel()
+                CommandLineOTAView(viewModel = viewModel)
             }
 
             composable(Screen.SupplierFeed.route) {
