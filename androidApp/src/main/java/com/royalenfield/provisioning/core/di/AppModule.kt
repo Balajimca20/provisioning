@@ -10,6 +10,7 @@ import com.royalenfield.provisioning.core.network.VehicleNetworkConnectionHelper
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
 import com.royalenfield.provisioning.feature.ota.data.OtaRepository
 import com.royalenfield.provisioning.feature.ota.domain.OtaPipeline
+import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAViewModel
 import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.data.SupplierFeedRepository
 import com.royalenfield.provisioning.feature.supplierfeed.domain.FetchTelemetryUseCase
@@ -79,6 +80,13 @@ val viewModelModule = module {
             context = androidContext(),
             otaPipeline = get(),
             otaRepository = get()
+        )
+    }
+
+    viewModel {
+        CommandLineOTAViewModel(
+            adbClient = get(),
+            context = androidContext()
         )
     }
 

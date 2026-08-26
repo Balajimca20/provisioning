@@ -120,18 +120,31 @@ class AdbClient(
             }
         }
 
-    suspend fun push(localFile: File, remotePath: String): AdbResult<Boolean> =
-        withContext(Dispatchers.IO) {
-            val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
-            try {
-                Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath")
-                dadb.push(localFile, remotePath)
-                AdbResult.Success(true)
-            } catch (e: Exception) {
-                Log.e(TAG, "Push failed: ${e.message}", e)
-                AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
-            }
+    suspend fun restartAsRoot(): AdbResult<String> = runShell("root")
+
+    suspend fun reboot(): AdbResult<String> = runShell("reboot")
+
+    suspend fun pushFile(
+        localFile: File,
+        remotePath: String,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null
+    ): AdbResult<Boolean> = withContext(Dispatchers.IO) {
+        val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
+        try {
+            Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath")
+            val totalBytes = localFile.length()
+            onProgress?.invoke(0L, totalBytes)
+            dadb.push(localFile, remotePath)
+            onProgress?.invoke(totalBytes, totalBytes)
+            AdbResult.Success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Push failed: ${e.message}", e)
+            AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
         }
+    }
+
+    suspend fun push(localFile: File, remotePath: String): AdbResult<Boolean> =
+        pushFile(localFile, remotePath, null)
 
     fun disconnect() {
         try {

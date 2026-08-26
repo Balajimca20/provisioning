@@ -230,7 +230,7 @@ class OtaViewModel(
     }
 
     fun confirmReboot() {
-        val targetVer = _uiState.value.selectedPackage?.targetVersion ?: "RE_UPDATED_V2.2.0"
+        val targetVer = _uiState.value.selectedPackage?.targetVersion ?: "Rebooting..."
         viewModelScope.launch {
             addLog("[CMD] executing sys-reboot...")
             otaPipeline.executeRebootAndVerify()
