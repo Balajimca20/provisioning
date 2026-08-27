@@ -23,7 +23,7 @@ android {
             dimension = "env"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            manifestPlaceholders["appName"] = "FF Mechanic (DEV)"
+            manifestPlaceholders["appName"] = "FF Provisioning (DEV)"
             manifestPlaceholders["envName"] = "DEV"
             manifestPlaceholders["usesCleartextTraffic"] = "true"
 
@@ -43,7 +43,7 @@ android {
             dimension = "env"
             applicationIdSuffix = ".uat"
             versionNameSuffix = "-uat"
-            manifestPlaceholders["appName"] = "FF Mechanic (UAT)"
+            manifestPlaceholders["appName"] = "FF Provisioning (UAT)"
             manifestPlaceholders["envName"] = "UAT"
             manifestPlaceholders["usesCleartextTraffic"] = "true"
 
@@ -62,7 +62,7 @@ android {
         create("prod") {
             dimension = "env"
             isDefault = true
-            manifestPlaceholders["appName"] = "FF Mechanic"
+            manifestPlaceholders["appName"] = "FF Provisioning"
             manifestPlaceholders["envName"] = "PROD"
             manifestPlaceholders["usesCleartextTraffic"] = "false"
 

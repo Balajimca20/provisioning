@@ -244,10 +244,12 @@ class CommandLineOTAViewModel(
         val remotePropsPath = "$remoteOTADirectory/payload_properties.txt"
         val formattedProps = payloadInfo.rawPropertiesText.replace("\r", "")
         log("⚙️ Staging payload properties metadata (size: ${payloadInfo.payloadSize}, offset: ${payloadInfo.payloadOffset})…")
-        
-        // Write properties directly to remote staging path
-        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && tr -d '\\r' < $remotePropsPath > ${remotePropsPath}.tmp && mv ${remotePropsPath}.tmp $remotePropsPath && chmod 666 $remotePropsPath"
-        Log.d(TAG, "Staging properties file command: $writePropsCmd")
+
+        // Ensure payload_properties.txt has explicit 666 permissions after writing
+        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && " +
+                "tr -d '\\r' < $remotePropsPath > ${remotePropsPath}.tmp && " +
+                "mv ${remotePropsPath}.tmp $remotePropsPath && " +
+                "chmod 666 $remotePropsPath"
         adbClient.runShell(writePropsCmd)
 
         val updateCommand = "UE_BIN=\$(which update_engine_client_android 2>/dev/null || which update_engine_client 2>/dev/null || echo update_engine_client_android); " +
