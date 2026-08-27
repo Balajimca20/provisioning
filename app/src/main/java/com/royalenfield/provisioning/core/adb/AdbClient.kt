@@ -84,7 +84,7 @@ class AdbClient(
                             emitLines("", packet.payload) { trySend(it) }
                         }
                         is AdbShellPacket.StdError -> {
-                            emitLines("ERR: ", packet.payload) { trySend(it) }
+                            emitLines("", packet.payload) { trySend(it) }
                         }
                         is AdbShellPacket.Exit -> {
                             break@loop
