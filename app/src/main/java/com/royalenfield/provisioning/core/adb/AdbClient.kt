@@ -19,7 +19,7 @@ sealed class AdbResult<out T> {
 class AdbClient(
     private val keyPairProvider: AdbKeyPairProvider
 ) {
-    private var dadbInstance: Dadb? = null
+    var dadbInstance: Dadb? = null
 
     val isConnected: Boolean
         get() = dadbInstance != null
