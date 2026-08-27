@@ -4,7 +4,7 @@ data class DashboardUiState(
     val isSetupStarted: Boolean = false,
     
     // Step 1: Wi-Fi Connection
-    val ssidInput: String = "RE_LXHD_250925",
+    val ssidInput: String = "RE_887E_250925",  // "RE_LXHD_250925"
     val passwordInput: String = "12345678",
     val ssidValidationError: String? = null,
     val isWifiConnecting: Boolean = false,
