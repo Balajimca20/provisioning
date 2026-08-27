@@ -105,7 +105,7 @@ val viewModelModule = module {
         )
     }
 
-    viewModel { ProvisioningViewModel(get()) }
+    viewModel { ProvisioningViewModel(get(),get())}
 }
 
 val appModules = listOf(

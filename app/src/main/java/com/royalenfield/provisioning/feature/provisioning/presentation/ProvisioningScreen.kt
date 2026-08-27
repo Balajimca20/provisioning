@@ -443,14 +443,32 @@ fun ProvisioningScreen(
                 .border(1.dp, BorderGray, RoundedCornerShape(4.dp))
                 .padding(3.dp)
         ) {
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(2.dp)),
-                color = AccentPurple,
-                trackColor = Color.Transparent,
-            )
+            when(provisioningStatus){
+                is ProvisioningStatus.Running -> {
+                    val progressFraction = provisioningStatus.progress / 100f
+                    LinearProgressIndicator(
+                        progress = { progressFraction },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = AccentPurple,
+                        trackColor = Color.Transparent,
+                    )
+                }
+                is ProvisioningStatus.Success -> {
+                    LinearProgressIndicator(
+                        progress = { 1f },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = AccentPurple,
+                        trackColor = Color.Transparent,
+                    )
+                }
+
+                else -> {}
+            }
+
         }
 
         // --- Section 4: Action Buttons Row ---
@@ -466,7 +484,9 @@ fun ProvisioningScreen(
                         onAddLogs("[INFO] Starting provisioning process...")
                     }
                 },
-                enabled = filePayloadList.isNotEmpty(),
+                enabled = vinNumber.isNotBlank() &&
+                        filePayloadList.isNotEmpty() &&
+                        provisioningStatus !is ProvisioningStatus.Running,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AccentPurple,
                     contentColor = PurpleButtonText,
@@ -585,26 +605,6 @@ fun LabeledGroupCard(
 }
 
 /**
- * Traverses the chosen directory, processes files, and generates a hard List<File> payload.
- */
-suspend fun generateFilePayloadFromUri(context: Context, folderUri: Uri): List<File> = withContext(Dispatchers.IO) {
-    val filePayloads = mutableListOf<File>()
-    val rootFolder = DocumentFile.fromTreeUri(context, folderUri)
-
-    if (rootFolder != null && rootFolder.isDirectory) {
-        // 1. Create a dedicated temporary cache directory to avoid cluttering storage
-        val targetCacheDir = File(context.cacheDir, "selected_payloads").apply {
-            if (!exists()) mkdirs()
-        }
-
-        // 2. Scan and convert DocumentFiles into java.io.File instances
-        traverseAndCopyPayload(context, rootFolder, targetCacheDir, filePayloads)
-    }
-
-    return@withContext filePayloads
-}
-
-/**
  * Recursive worker that copies stream contents into localized app-specific files.
  */
 private fun traverseAndCopyPayload(
@@ -637,16 +637,6 @@ private fun traverseAndCopyPayload(
         }
     }
 }
-
-
-fun convertUriToFile(context: Context, uri: Uri): File {
-    val tempFile = File(context.cacheDir, "picked_${System.currentTimeMillis()}")
-    context.contentResolver.openInputStream(uri)?.use { input ->
-        FileOutputStream(tempFile).use { output -> input.copyTo(output) }
-    }
-    return tempFile
-}
-
 
 /**
  * Reads the directory structure and converts items into a List<File> payload.

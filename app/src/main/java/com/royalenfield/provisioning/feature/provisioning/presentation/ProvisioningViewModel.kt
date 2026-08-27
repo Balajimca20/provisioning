@@ -6,12 +6,16 @@ import androidx.lifecycle.viewModelScope
 import com.royalenfield.provisioning.core.adb.AdbClient
 import com.royalenfield.provisioning.core.adb.AdbResult
 import com.royalenfield.provisioning.feature.provisioning.data.repository.ProvisioningRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -39,89 +43,60 @@ class ProvisioningViewModel(
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
-    fun startProvisioning(ip: String, payloadFiles: List<File>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                log("🔓 Acquiring Root Access...")
-                _status.value = ProvisioningStatus.Running("Acquiring Root Access", 10)
-          //      executeShellCommand("adb connect $ip")
-                adbClient.runShell("adb root")
+    private var provisioningJob: Job? = null
 
-                log("🛑 Stopping target hub services...")
-                adbClient.runShell("adb shell stop c2c_hub_service")
-
-                log("☁️ Registering Cloud Metadata...")
-                _status.value = ProvisioningStatus.Running("Registering Cloud Metadata", 25)
-                val isRegistered = repository.registerVehicleMetadata(
-                    vin = _provisioningUiState.value.vinNumber,
-                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
-                    modelDesc = _provisioningUiState.value.selectedVariant.description,
-                    region = _provisioningUiState.value.selectedRegion.regionName,
-                    country = _provisioningUiState.value.selectedRegion.country
-                ).getOrDefault(false)
-
-                if (!isRegistered) log("⚠️ Cloud registration returned an unexpected status code.")
-
-                log("🧹 Clearing target buffers...")
-                adbClient.runShell("adb shell rm -rf /data/vendor/c2c/tele_buff/*")
-                adbClient.runShell("adb shell rm -rf /mnt/vendor/persist/c2c/RFF/READY/*")
-
-                log("📂 Pushing payload files...")
-                payloadFiles.forEachIndexed { index, file ->
-                    adbClient.pushFile(file, "/mnt/vendor/persist/c2c/"){ send,total->
-                        _status.value = ProvisioningStatus.Running("Pushing ${file.name}", (send.toFloat()/total*100).toInt())
-                    }
+    /**
+     * Stops the ongoing provisioning process by cancelling the coroutine job
+     * and resetting the status to Idle.
+     */
+    fun stopProvisioning() {
+        if (provisioningJob?.isActive == true) {
+            provisioningJob?.cancel()
+            provisioningJob = null
+            _status.value = ProvisioningStatus.Idle
+            log("⛔ Provisioning process terminated by user.")
+            
+            // Optional: Restart the hub service if it was stopped during provisioning
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    adbClient.runShell("start c2c_hub_service")
+                } catch (e: Exception) {
+                    // Ignore cleanup errors
                 }
-
-                log("🔄 Rebooting device...")
-                adbClient.runShell("adb reboot")
-                log("🛰️ Monitoring Telemetry JSON...")
-                monitorTelemetryState()
-
-                _status.value = ProvisioningStatus.Success("Provisioning completed successfully!")
-            } catch (e: Exception) {
-                log("❌ Error: ${e.message}")
-                _status.value = ProvisioningStatus.Error(e.message ?: "Execution failed")
             }
         }
     }
 
-    fun stopProvisioning(){
-        viewModelScope.launch(Dispatchers.IO) {
-        }
-    }
+    private suspend fun monitorTelemetryState() {
+        log("🔍 Monitoring telemetry state...")
 
-    private fun monitorTelemetryState() {
-        viewModelScope.launch {
-            var state = ""
-            while (state != "PRE_REGIONAL_ACTIVE") {
-                val output = adbClient.runShell("adb shell cat /mnt/vendor/persist/c2c/c2c_vehicle.json")
-                when(output){
-                    is AdbResult.Failure -> {
+        while (true) {
+            when (
+                val result = adbClient.runShell(
+                    "cat /mnt/vendor/persist/c2c/c2c_vehicle.json"
+                )
+            ) {
+                is AdbResult.Success -> {
+                    val output = result.data
+                    log("📡 Telemetry JSON: $output")
 
-                    }
-                    is AdbResult.Success -> {
-                        if (output.data.contains("PRE_REGIONAL_ACTIVE")) {
-                            log("🏆 Target State [PRE_REGIONAL_ACTIVE] Detected!")
-                            break
-                        }
+                    if (output.contains("PRE_REGIONAL_ACTIVE")) {
+                        log("🏆 Target State [PRE_REGIONAL_ACTIVE] Detected!")
+                        break
                     }
                 }
 
-                delay(2000)
+                is AdbResult.Failure -> {
+                    log("❌ Failed to read telemetry state: ${result}")
+                }
             }
+
+            delay(2000) // Suspension point that checks for cancellation
         }
+
+        log("🛑 Telemetry monitoring stopped")
     }
 
-    private fun executeShellCommand(cmd: String): String {
-        return try {
-            val process = Runtime.getRuntime().exec(cmd)
-            process.inputStream.bufferedReader().readText()
-        } catch (e: Exception) {
-            Log.e("ProvisioningViewModel", "Error executing shell command: ${e.message}")
-            ""
-        }
-    }
 
     private fun log(message: String) {
         _logs.value = _logs.value + "[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(
@@ -144,6 +119,133 @@ class ProvisioningViewModel(
     fun onPostLog(log: String) {
         _logs.value += log
     }
+
+    fun startProvisioning(
+        ip: String,
+        payloadFiles: List<File>
+    ) {
+        provisioningJob?.cancel()
+        provisioningJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Check connection
+                log("🔌 Checking ADB connection...")
+                if (!adbClient.isConnected) {
+                    throw Exception("ADB device is not connected")
+                }
+
+                // 2. Acquire root
+                log("🔓 Acquiring Root Access...")
+                _status.value = ProvisioningStatus.Running("Acquiring Root Access", 5)
+                adbClient.runShell("root")
+
+                // 3. Stop C2C service
+                log("🛑 Stopping target hub services...")
+                _status.value = ProvisioningStatus.Running("Stopping target services", 10)
+                adbClient.runShell("stop c2c_hub_service")
+
+                // 4. Register cloud metadata
+                log("☁️ Registering Cloud Metadata...")
+                _status.value = ProvisioningStatus.Running("Registering Cloud Metadata", 20)
+                val isRegistered = repository.registerVehicleMetadata(
+                    vin = _provisioningUiState.value.vinNumber,
+                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
+                    modelDesc = _provisioningUiState.value.selectedVariant.description,
+                    region = _provisioningUiState.value.selectedRegion.regionName,
+                    country = _provisioningUiState.value.selectedRegion.country
+                ).getOrDefault(false)
+
+                if (!isRegistered) {
+                    log("⚠️ Cloud registration returned unexpected status")
+                }
+
+                // 5. Clear telemetry buffer
+                log("🧹 Clearing target buffers...")
+                _status.value = ProvisioningStatus.Running("Clearing target buffers", 30)
+                adbClient.runShell("rm -rf /data/vendor/c2c/tele_buff/*")
+                adbClient.runShell("rm -rf /mnt/vendor/persist/c2c/RFF/READY/*")
+
+                // 6. Push payload files
+                log("📂 Pushing ${payloadFiles.size} payload files...")
+                pushPayloadFiles(payloadFiles)
+
+                // 7. Validate payload files
+                log("🔍 Validating pushed files...")
+                _status.value = ProvisioningStatus.Running("Validating payload files", 90)
+                validatePayloadFiles(payloadFiles)
+
+                // 8. Reboot
+                log("🔄 Rebooting device...")
+                _status.value = ProvisioningStatus.Running("Rebooting device", 95)
+                adbClient.runShell("reboot")
+
+                // 9. Monitor telemetry
+                log("🛰️ Monitoring Telemetry JSON...")
+                monitorTelemetryState()
+
+                // 10. Success
+                _status.value = ProvisioningStatus.Success("Provisioning completed successfully!")
+
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    log("⛔ Provisioning cancelled.")
+                } else {
+                    log("❌ Provisioning failed: ${e.message}")
+                    _status.value = ProvisioningStatus.Error(e.message ?: "Execution failed")
+                }
+            }
+        }
+    }
+
+    private suspend fun pushPayloadFiles(payloadFiles: List<File>) {
+        val totalBytes = payloadFiles.sumOf { it.length() }
+        var uploadedBytes = 0L
+
+        payloadFiles.forEachIndexed { index, file ->
+            yield() // Check for cancellation before each file push
+            
+            log("📤 Pushing ${index + 1}/${payloadFiles.size}: ${file.name}")
+            val fileStartBytes = uploadedBytes
+
+            adbClient.pushFile(file, "/mnt/vendor/persist/c2c/${file.name}") { sent, total ->
+                val overallSent = fileStartBytes + sent
+                val uploadPercent = if (totalBytes > 0) (overallSent * 100 / totalBytes).toInt() else 0
+
+                // Upload represents 30% -> 85% range in the UI
+                val progress = 30 + (uploadPercent * 55 / 100)
+                _status.value = ProvisioningStatus.Running(
+                    "Pushing ${index + 1}/${payloadFiles.size}: ${file.name}",
+                    progress
+                )
+            }
+
+            uploadedBytes += file.length()
+            log("✅ Pushed ${file.name}")
+        }
+    }
+
+    private suspend fun validatePayloadFiles(payloadFiles: List<File>) {
+        payloadFiles.forEachIndexed { index, file ->
+            yield() // Check for cancellation
+            val remotePath = "/mnt/vendor/persist/c2c/${file.name}"
+            log("🔍 Checking ${index + 1}/${payloadFiles.size}: ${file.name}")
+
+            val result = adbClient.runShell("stat -c %s \"$remotePath\"")
+
+            when(result){
+                is AdbResult.Failure -> {
+                    throw Exception("Failed to validate ${file.name}")
+                }
+                is AdbResult.Success -> {
+                    val remoteSize = result.data.trim().toLongOrNull()
+                    if (remoteSize == null || remoteSize != file.length()) {
+                        throw Exception("Size mismatch for ${file.name}: local=${file.length()}, remote=$remoteSize")
+                    }
+                    log("✅ ${file.name} validated")
+                }
+            }
+        }
+    }
+
 }
 
 data class ProvisioningStateModel(

@@ -3,7 +3,10 @@ package com.royalenfield.provisioning.feature.provisioning.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.royalenfield.provisioning.feature.provisioning.data.repository.ProvisioningRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,8 +35,11 @@ class ProvisioningViewModel(private val repository: ProvisioningRepository) : Vi
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
+    private var provisioningJob: Job? = null
+
     fun startProvisioning(ip: String, payloadFiles: List<File>) {
-        viewModelScope.launch(Dispatchers.IO) {
+        provisioningJob?.cancel()
+        provisioningJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 log("🔓 Acquiring Root Access...")
                 _status.value = ProvisioningStatus.Running("Acquiring Root Access", 10)
@@ -74,18 +80,22 @@ class ProvisioningViewModel(private val repository: ProvisioningRepository) : Vi
 
                 _status.value = ProvisioningStatus.Success("Provisioning completed successfully!")
             } catch (e: Exception) {
-                log("❌ Error: ${e.message}")
-                _status.value = ProvisioningStatus.Error(e.message ?: "Execution failed")
+                if (e is CancellationException) {
+                    log("⛔ Provisioning cancelled.")
+                } else {
+                    log("❌ Error: ${e.message}")
+                    _status.value = ProvisioningStatus.Error(e.message ?: "Execution failed")
+                }
             }
         }
     }
 
-    fun stopProvisioning(){
-        viewModelScope.launch(Dispatchers.IO) {
-        }
+    fun stopProvisioning() {
+        provisioningJob?.cancel()
+        _status.value = ProvisioningStatus.Idle
     }
 
-    private fun monitorTelemetryState() {
+    private suspend fun monitorTelemetryState() {
         var state = ""
         while (state != "PRE_REGIONAL_ACTIVE") {
             val output = executeShellCommand("adb shell cat /mnt/vendor/persist/c2c/c2c_vehicle.json")
@@ -93,7 +103,7 @@ class ProvisioningViewModel(private val repository: ProvisioningRepository) : Vi
                 log("🏆 Target State [PRE_REGIONAL_ACTIVE] Detected!")
                 break
             }
-            Thread.sleep(2000)
+            delay(2000)
         }
     }
 
