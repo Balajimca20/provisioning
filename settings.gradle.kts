@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "RoyalEnfieldProvisioning"
-include(":androidApp")
+include(":app")
