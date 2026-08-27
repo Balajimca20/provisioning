@@ -24,11 +24,11 @@ object OTAZipInspector {
     @Throws(Exception::class)
     fun inspect(file: File): OTAPayloadInfo {
         val zip = ZipFile(file)
-        
+
         // 1. Extract payload_properties.txt and format strictly with Unix '\n'
         val propsEntry = zip.getEntry("payload_properties.txt")
             ?: throw IllegalStateException("payload_properties.txt not found in ZIP archive")
-        
+
         val rawHeaders = zip.getInputStream(propsEntry).bufferedReader().use { it.readText() }
         val cleanHeaders = rawHeaders
             .split(Regex("[\r\n]+"))
@@ -42,6 +42,16 @@ object OTAZipInspector {
         val payloadEntry = zip.getEntry("payload.bin")
             ?: throw IllegalStateException("payload.bin not found in ZIP archive")
         val payloadSize = payloadEntry.size
+
+        // payload.bin's raw offset is only meaningful if the entry is stored uncompressed —
+        // AOSP OTA generation always stores it this way, but verify rather than assume, since
+        // the CrAU check alone previously wasn't actually enforced (see below).
+        if (payloadEntry.method != java.util.zip.ZipEntry.STORED) {
+            throw IllegalStateException(
+                "payload.bin is compressed (method=${payloadEntry.method}); a raw byte offset " +
+                        "is not valid for a compressed entry"
+            )
+        }
 
         val raf = RandomAccessFile(file, "r")
         var dataOffset = -1L
@@ -73,7 +83,11 @@ object OTAZipInspector {
 
                     if (entryName == "payload.bin") {
                         val candidateOffset = currentPos + 30 + nameLen + extraLen
-                        // Verify CrAU header
+                        // Verify CrAU header. Only accept this offset if the magic actually
+                        // matches — previously a mismatch was logged as a warning but the
+                        // offset was set anyway, which both (a) handed a wrong offset to the
+                        // update engine and (b) prevented the raw-scan fallback below from
+                        // ever running, since it only triggers when dataOffset is still -1.
                         raf.seek(candidateOffset)
                         val magicCheck = ByteArray(4)
                         raf.readFully(magicCheck)
@@ -82,8 +96,13 @@ object OTAZipInspector {
                             dataOffset = candidateOffset
                             break
                         } else {
-                            Log.w(TAG, "Offset $candidateOffset found for payload.bin but CrAU magic mismatch. Continuing scan...")
-                            dataOffset = candidateOffset
+                            Log.w(
+                                TAG,
+                                "Offset $candidateOffset found for payload.bin but CrAU magic " +
+                                        "mismatch. Continuing scan..."
+                            )
+                            // dataOffset intentionally left at -1L so scanning continues and,
+                            // if nothing else matches, the raw magic-byte scan fallback runs.
                         }
                     }
                     val entry = zip.getEntry(entryName)
@@ -138,4 +157,3 @@ object OTAZipInspector {
         )
     }
 }
-

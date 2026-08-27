@@ -51,6 +51,7 @@ class CommandLineOTAViewModel(
     private val context: Context
 ) : ViewModel() {
 
+    private val TAG = "CommandLineOTA"
     private val _uiState = MutableStateFlow(CommandLineOtaUiState())
     val uiState: StateFlow<CommandLineOtaUiState> = _uiState.asStateFlow()
 
@@ -64,10 +65,12 @@ class CommandLineOTAViewModel(
         if (uri == null) return
         viewModelScope.launch {
             try {
+                _uiState.value = _uiState.value.copy(statusText = "⚙️ LOADING FILE…")
                 selectUri(uri)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    fileError = "Couldn't read the selected file: ${e.localizedMessage}"
+                    fileError = "Couldn't read the selected file: ${e.localizedMessage}",
+                    statusText = "❌ FILE ERROR"
                 )
             }
         }
@@ -79,32 +82,78 @@ class CommandLineOTAViewModel(
             selectedFile = file,
             selectedFileName = file.name,
             selectedFileSizeDescription = sizeDesc,
-            fileError = null
+            fileError = null,
+            statusText = "READY: ${file.name}"
         )
     }
 
     private suspend fun selectUri(uri: Uri) = withContext(Dispatchers.IO) {
-        val fileName = getFileName(uri) ?: "update.zip"
-        val destination = File(context.cacheDir, fileName)
-        if (destination.exists()) {
-            destination.delete()
+        // 1. If it's already a file URI, use it directly (common for local path selection)
+        if (uri.scheme == "file") {
+            val path = uri.path ?: throw IllegalArgumentException("Invalid file path")
+            val file = File(path)
+            if (file.exists()) {
+                Log.d(TAG, "Using file directly: ${file.absolutePath}")
+                selectLocalFile(file)
+                return@withContext
+            }
         }
 
+        // 2. Query original size from metadata first to detect partial copies later
+        val expectedSize = getFileSizeMetadata(uri)
+        val fileName = getFileName(uri) ?: "update.zip"
+
+        // 3. Prepare destination in cacheDir (Content URIs must be copied to a local File for RandomAccess)
+        val destination = File(context.cacheDir, "ota_staging_${System.currentTimeMillis()}.zip")
+
+        // Cleanup old staging files in cache
+        context.cacheDir.listFiles { f -> f.name.startsWith("ota_staging_") }?.forEach { it.delete() }
+
+        // 4. Perform copy from the content resolver stream to the physical file
         context.contentResolver.openInputStream(uri)?.use { input ->
             FileOutputStream(destination).use { output ->
                 input.copyTo(output)
+                output.flush()
+                try {
+                    output.fd.sync() // Force write to physical storage to ensure accurate .length()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Storage sync failed: ${e.message}")
+                }
             }
         } ?: throw IllegalStateException("Unable to open stream for $uri")
 
-        val size = destination.length()
-        val sizeDesc = formatByteCount(size)
+        // 5. Verify the copy integrity
+        val finalSize = destination.length()
+        if (expectedSize > 0 && finalSize != expectedSize) {
+            destination.delete()
+            throw IllegalStateException("Size mismatch! Source reported $expectedSize but only $finalSize was copied. Device storage may be full.")
+        }
 
         _uiState.value = _uiState.value.copy(
             selectedFile = destination,
-            selectedFileName = destination.name,
-            selectedFileSizeDescription = sizeDesc,
-            fileError = null
+            selectedFileName = fileName,
+            selectedFileSizeDescription = formatByteCount(finalSize),
+            fileError = null,
+            statusText = "READY: $fileName"
         )
+    }
+
+    private fun getFileSizeMetadata(uri: Uri): Long {
+        return try {
+            if (uri.scheme == "content") {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (sizeIndex != -1) return cursor.getLong(sizeIndex)
+                    }
+                }
+            } else if (uri.scheme == "file") {
+                return uri.path?.let { File(it).length() } ?: 0L
+            }
+            -1L
+        } catch (e: Exception) {
+            -1L
+        }
     }
 
     private fun getFileName(uri: Uri): String? {
@@ -130,12 +179,66 @@ class CommandLineOTAViewModel(
         }
     }
 
+    private fun log(text: String) {
+        _uiState.value = _uiState.value.copy(
+            logLines = _uiState.value.logLines + OTALogLine(text = text)
+        )
+    }
+
+    private suspend fun convertFileToChecksum(path: String): Long {
+        return withContext(Dispatchers.IO) {
+            val crc = CRC32()
+            val file = File(path)
+            FileInputStream(file).use { fis ->
+                val buffer = ByteArray(64 * 1024)
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    crc.update(buffer, 0, bytesRead)
+                }
+            }
+            crc.value
+        }
+    }
+
+    private fun handleEngineLine(line: String) {
+        log("📲 $line")
+
+        // Progress parsing logic
+        val dlMatch = Pattern.compile("UPDATE_STATUS_DOWNLOADING\\s*\\(\\d+\\),\\s*([0-9.]+)").matcher(line)
+        if (dlMatch.find()) {
+            val dlPct = dlMatch.group(1)?.toDoubleOrNull() ?: 0.0
+            _uiState.value = _uiState.value.copy(
+                progress = 0.55 + (dlPct * 0.25),
+                statusText = "🛠️ INSTALLING: ${String.format(Locale.US, "%.1f", dlPct * 100)}%"
+            )
+            return
+        }
+
+        val vfMatch = Pattern.compile("UPDATE_STATUS_VERIFYING\\s*\\(\\d+\\),\\s*([0-9.]+)").matcher(line)
+        if (vfMatch.find()) {
+            val vfPct = vfMatch.group(1)?.toDoubleOrNull() ?: 0.0
+            _uiState.value = _uiState.value.copy(
+                progress = 0.80 + (vfPct * 0.15),
+                statusText = "🔍 VERIFYING: ${String.format(Locale.US, "%.1f", vfPct * 100)}%"
+            )
+            return
+        }
+    }
+
     fun dismissFileError() {
         _uiState.value = _uiState.value.copy(fileError = null)
     }
 
     fun dismissResultAlert() {
         _uiState.value = _uiState.value.copy(resultAlertMessage = null)
+    }
+
+    // Renamed from onRebootConsent to match the call sites in CommandLineOTAView.kt
+    // (viewModel.respondToRebootConsent(...)), which previously referenced a function
+    // that didn't exist on this class.
+    fun respondToRebootConsent(accepted: Boolean) {
+        rebootConsentDeferred?.complete(accepted)
+        _uiState.value = _uiState.value.copy(rebootConsentRequested = false)
     }
 
     // MARK: - Pipeline Execution
@@ -165,65 +268,55 @@ class CommandLineOTAViewModel(
         log("=== Starting Command Line OTA Upgrade ===")
         Log.i(TAG, "Payload target: ${localZipFile.name}, size: ${localZipFile.length()} bytes")
 
-        // 1. Perform checksum synchronously in the coroutine
+        // 1. Perform checksum
         log("🔍 Calculating local package CRC32 checksum…")
-        val checksum = withContext(Dispatchers.Default) {
-            convertFileToChecksum(localZipFile.absolutePath)
-        }
+        val checksum = convertFileToChecksum(localZipFile.absolutePath)
         log("🔍 Calculated CRC32 Checksum: $checksum (0x${checksum.toString(16).uppercase(Locale.US)})")
-        Log.i(TAG, "Package CRC32: $checksum (0x${checksum.toString(16).uppercase(Locale.US)})")
 
         _uiState.value = _uiState.value.copy(
             statusText = "🔓 GAINING ROOT ACCESS…",
             progress = 0.05
         )
         log("🔓 Acquiring root permissions on the Android device…")
-        
+
+        // AdbClient.restartAsRoot() now genuinely verifies root (via dadb.root() + whoami)
+        // instead of reporting Success regardless of outcome — treat Failure as fatal, since
+        // every step below (staging under /data, update_engine_client) requires real root.
         val rootResult = adbClient.restartAsRoot()
-        if (rootResult is AdbResult.Failure && !rootResult.message.contains("already running as root", ignoreCase = true)) {
-            log("⚠️ Root escalation failed (continuing anyway): ${rootResult.message}")
-            Log.w(TAG, "Root escalation warning: ${rootResult.message}")
-        } else {
-            Log.d(TAG, "Device root state verified: adbd is running as root (uid=0)")
+        if (rootResult is AdbResult.Failure) {
+            log("❌ Root escalation failed: ${rootResult.message}")
+            return@withContext Pair(false, "Root escalation failed: ${rootResult.message}")
         }
+        log("✅ Root confirmed: ${(rootResult as AdbResult.Success).data}")
 
         val remoteZipPath = "$remoteOTADirectory/update.zip"
         _uiState.value = _uiState.value.copy(statusText = "🚀 PUSHING OTA ZIP PACKAGE…")
         log("🚀 Checking and staging OTA package to $remoteZipPath…")
 
-        // Ensure remote directory exists
-        Log.d(TAG, "Executing: mkdir -p $remoteOTADirectory && chmod 777 $remoteOTADirectory")
         adbClient.runShell("mkdir -p $remoteOTADirectory && chmod 777 $remoteOTADirectory")
 
-        // Check if file is already on device with identical size to avoid re-pushing 1GB over slow socket
+        // Check if file is already on device with identical size
         val localSize = localZipFile.length()
         val checkRes = adbClient.runShell("stat -c %s $remoteZipPath || ls -l $remoteZipPath")
         val alreadyStaged = checkRes is AdbResult.Success && checkRes.data.contains(localSize.toString())
 
         if (alreadyStaged) {
-            log("⚡ Package already staged on device ($localSize bytes). Skipping redundant transfer.")
-            Log.i(TAG, "Package cache hit on target device: $remoteZipPath matches size $localSize")
+            log("⚡ Package already staged on device. Skipping transfer.")
             _uiState.value = _uiState.value.copy(progress = 0.5)
         } else {
-            Log.i(TAG, "Beginning file transfer of $localSize bytes -> $remoteZipPath")
             val startTime = System.currentTimeMillis()
             val pushResult = adbClient.pushFile(localZipFile, remoteZipPath) { sent, total ->
                 val fraction = if (total > 0) sent.toDouble() / total.toDouble() else 0.0
-                _uiState.value = _uiState.value.copy(
-                    progress = 0.05 + fraction * 0.45
-                )
+                _uiState.value = _uiState.value.copy(progress = 0.05 + fraction * 0.45)
             }
-
-            val elapsedSec = ((System.currentTimeMillis() - startTime).coerceAtLeast(100)) / 1000.0
-            val speedMb = String.format(Locale.US, "%.1f", (localSize / 1024.0 / 1024.0) / elapsedSec)
-
+            // pushFile now returns Failure whenever the transfer didn't actually complete
+            // (including the previously-silent case where nothing was really pushed) — no
+            // change needed here, this check now means what it always should have.
             if (pushResult is AdbResult.Failure) {
-                log("⚠️ Push notification: ${pushResult.message} (Verifying destination...)")
-                Log.w(TAG, "Push issue: ${pushResult.message}")
-            } else {
-                log("✅ Staged $localSize bytes in ${elapsedSec}s ($speedMb MB/s).")
-                Log.i(TAG, "Staging completed in ${elapsedSec}s ($speedMb MB/s)")
+                log("❌ Push failed: ${pushResult.message}")
+                return@withContext Pair(false, "Transfer failed: ${pushResult.message}")
             }
+            log("✅ Staged $localSize bytes in ${((System.currentTimeMillis() - startTime)/1000.0)}s.")
             _uiState.value = _uiState.value.copy(progress = 0.5)
         }
 
@@ -232,254 +325,56 @@ class CommandLineOTAViewModel(
         val payloadInfo: OTAPayloadInfo
         try {
             payloadInfo = OTAZipInspector.inspect(localZipFile)
-            Log.d(TAG, "Extracted payload specs: offset=${payloadInfo.payloadOffset}, size=${payloadInfo.payloadSize}")
-            Log.d(TAG, "Raw headers:\n${payloadInfo.headers}")
         } catch (e: Exception) {
             log("❌ ZIP header extraction failed: ${e.localizedMessage}")
-            Log.e(TAG, "ZIP header extraction failed", e)
             return@withContext Pair(false, "Couldn't read the OTA package: ${e.localizedMessage}")
         }
+        log("⚙️ Resolved payload.bin at offset=${payloadInfo.payloadOffset}, size=${payloadInfo.payloadSize}")
 
-        // Stage payload_properties.txt with exact newlines on device so update_engine parses headers without corruption
         val remotePropsPath = "$remoteOTADirectory/payload_properties.txt"
-        val formattedProps = payloadInfo.rawPropertiesText.replace("\r", "")
-        log("⚙️ Staging payload properties metadata (size: ${payloadInfo.payloadSize}, offset: ${payloadInfo.payloadOffset})…")
-
-        // Ensure payload_properties.txt has explicit 666 permissions after writing
-        val writePropsCmd = "printf '%s\\n' '${formattedProps.replace("'", "'\\''")}' > $remotePropsPath && " +
-                "tr -d '\\r' < $remotePropsPath > ${remotePropsPath}.tmp && " +
-                "mv ${remotePropsPath}.tmp $remotePropsPath && " +
-                "chmod 666 $remotePropsPath"
+        val writePropsCmd = "printf '%s\\n' '${payloadInfo.rawPropertiesText.replace("'", "'\\''")}' > $remotePropsPath && chmod 666 $remotePropsPath"
         adbClient.runShell(writePropsCmd)
 
         val updateCommand = "UE_BIN=\$(which update_engine_client_android 2>/dev/null || which update_engine_client 2>/dev/null || echo update_engine_client_android); " +
                 "\$UE_BIN --update --follow --payload=file://$remoteZipPath" +
                 " --offset=${payloadInfo.payloadOffset} --size=${payloadInfo.payloadSize}" +
                 " --headers=\"\$(cat $remotePropsPath | tr -d '\\r')\""
-        log("⚙️ Generated engine command:\n$updateCommand")
-        Log.i(TAG, "Spawn engine command: $updateCommand")
 
-        _uiState.value = _uiState.value.copy(
-            statusText = "🔥 STARTING UPDATE ENGINE…",
-            progress = 0.55
-        )
-        log("🔥 Preparing update_engine daemon permissions & resetting locks…")
+        _uiState.value = _uiState.value.copy(statusText = "🔥 STARTING UPDATE ENGINE…", progress = 0.55)
 
-        // 1. Ensure daemon permissions & SELinux contexts
         adbClient.runShell("setenforce 0 || true")
-        adbClient.runShell("chcon -R u:object_r:ota_package_file:s0 $remoteOTADirectory || true")
         adbClient.runShell("chmod -R 777 $remoteOTADirectory || true")
-        // 2. Clear any lingering stale update state
-        adbClient.runShell("update_engine_client_android --cancel || update_engine_client --cancel || true")
+        adbClient.runShell("update_engine_client_android --cancel || true")
 
-        log("🔥 Spawning update_engine daemon on the device. Streaming output…")
+        log("🔥 Spawning update_engine daemon. Streaming output…")
 
         var sawNeedRebootSignature = false
         var sawPayloadCompleteSignature = false
-        var lastErrorMessage: String? = null
 
         try {
-            val shellCommand = "cd $remoteOTADirectory && $updateCommand"
-            adbClient.runShellStreaming(shellCommand).collect { line ->
-                val cleanLine = line.trim()
-                if (cleanLine.isNotEmpty()) {
-                    if (cleanLine.contains("UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) ||
-                        cleanLine.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
-                        cleanLine.contains("Update succeeded", ignoreCase = true)) {
-                        sawNeedRebootSignature = true
-                    }
-                    if (cleanLine.contains("onPayloadApplicationComplete(ErrorCode::kSuccess", ignoreCase = true) ||
-                        cleanLine.contains("ErrorCode::kSuccess", ignoreCase = true)) {
-                        sawPayloadCompleteSignature = true
-                    }
-                    if (cleanLine.contains("ErrorCode::k", ignoreCase = true) && !cleanLine.contains("kSuccess", ignoreCase = true)) {
-                        lastErrorMessage = cleanLine
-                    }
-                    handleEngineLine(cleanLine)
-                }
+            adbClient.runShellStreaming("cd $remoteOTADirectory && $updateCommand").collect { line ->
+                handleEngineLine(line)
+                if (line.contains("UPDATED_NEED_REBOOT", ignoreCase = true)) sawNeedRebootSignature = true
+                if (line.contains("ErrorCode::kSuccess", ignoreCase = true)) sawPayloadCompleteSignature = true
             }
         } catch (e: Exception) {
-            log("⚠️ Streaming notice: ${e.localizedMessage} (Continuing with daemon status check)")
+            log("⚠️ Streaming notice: ${e.localizedMessage}")
         }
 
-        // If streaming completed or daemon detached, poll update_engine_client --status to verify progress
-        if (!sawNeedRebootSignature && !sawPayloadCompleteSignature) {
-            log("🔍 Polling background update_engine daemon status…")
-            var pollAttempts = 0
-            val maxPollAttempts = 40 // ~40 seconds
+        if (sawNeedRebootSignature || sawPayloadCompleteSignature) {
+            log("🎉 OTA updates successfully registered in A/B slots!")
+            _uiState.value = _uiState.value.copy(rebootConsentRequested = true, progress = 0.95)
 
-            while (pollAttempts < maxPollAttempts && !sawNeedRebootSignature && !sawPayloadCompleteSignature) {
-                delay(1000)
-                pollAttempts++
-
-                val statusRes = adbClient.runShell("which update_engine_client_android >/dev/null 2>&1 && update_engine_client_android --status || update_engine_client --status")
-                if (statusRes is AdbResult.Success) {
-                    val statusOut = statusRes.data.trim()
-                    if (statusOut.isNotEmpty()) {
-                        handleEngineLine(statusOut)
-                        if (statusOut.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
-                            statusOut.contains("CURRENT_OP=UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) ||
-                            statusOut.contains("CURRENT_OP=6", ignoreCase = true)) {
-                            sawNeedRebootSignature = true
-                            break
-                        } else if (statusOut.contains("UPDATE_STATUS_REPORTING_ERROR_EVENT", ignoreCase = true) ||
-                                   statusOut.contains("CURRENT_OP=7", ignoreCase = true)) {
-                            lastErrorMessage = "UpdateEngine reported error state: $statusOut"
-                            break
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!sawNeedRebootSignature && !sawPayloadCompleteSignature) {
-            val errReason = lastErrorMessage ?: "OTA did not report success signature — review the log for details."
-            log("❌ $errReason")
-            return@withContext Pair(false, errReason)
-        }
-
-        _uiState.value = _uiState.value.copy(progress = 0.95)
-        log("🎉 OTA update successfully registered!")
-
-        val shouldReboot = requestRebootConsent()
-        if (shouldReboot) {
-            log("🔄 Rebooting device…")
-            _uiState.value = _uiState.value.copy(
-                statusText = "🔄 REBOOTING DEVICE…",
-                progress = 1.0
-            )
-            adbClient.reboot()
-            Pair(true, "OTA pipeline completed successfully. Device is rebooting.")
-        } else {
-            _uiState.value = _uiState.value.copy(progress = 1.0)
-            Pair(true, "OTA pipeline flashed successfully. Reboot skipped.")
-        }
-    }
-
-    private fun handleEngineLine(line: String) {
-        log("📲 $line")
-
-        if (line.contains("UPDATE_STATUS_FINALIZING", ignoreCase = true) || line.contains("FINALIZING", ignoreCase = true)) {
-            _uiState.value = _uiState.value.copy(
-                statusText = "⚡ FINALIZING PARTITIONS & BOOTCTRL…",
-                progress = 0.94
-            )
-            return
-        }
-
-        if (line.contains("UPDATE_STATUS_UPDATED_NEED_REBOOT", ignoreCase = true) || 
-            line.contains("UPDATED_NEED_REBOOT", ignoreCase = true) ||
-            line.contains("Update succeeded", ignoreCase = true)) {
-            _uiState.value = _uiState.value.copy(
-                statusText = "✅ PAYLOAD VERIFIED & APPLIED",
-                progress = 0.95
-            )
-            return
-        }
-
-        extractFraction(downloadingPattern, line)?.let { fraction ->
-            val pct = (fraction * 100).toInt()
-            _uiState.value = _uiState.value.copy(
-                statusText = "🛠️ INSTALLING: $pct%",
-                progress = 0.55 + fraction * 0.25
-            )
-        }
-        extractFraction(verifyingPattern, line)?.let { fraction ->
-            val pct = (fraction * 100).toInt()
-            _uiState.value = _uiState.value.copy(
-                statusText = "🔍 VERIFYING: $pct%",
-                progress = 0.80 + fraction * 0.14
-            )
-        }
-
-        extractFraction(genericProgressPattern, line)?.let { fraction ->
-            val pct = (fraction * 100).toInt()
-            if (fraction < 0.8) {
-                _uiState.value = _uiState.value.copy(
-                    statusText = "🛠️ FLASHING: $pct%",
-                    progress = 0.55 + fraction * 0.30
-                )
+            rebootConsentDeferred = CompletableDeferred()
+            if (rebootConsentDeferred?.await() == true) {
+                log("🔄 Requesting device reboot…")
+                adbClient.reboot()
+                return@withContext Pair(true, "OTA Successfully applied. Device rebooting…")
             } else {
-                _uiState.value = _uiState.value.copy(
-                    statusText = "🔍 VERIFYING: $pct%",
-                    progress = 0.80 + fraction * 0.15
-                )
+                return@withContext Pair(true, "OTA Successfully applied. Reboot skipped.")
             }
-        }
-    }
-
-    private suspend fun requestRebootConsent(): Boolean {
-        val deferred = CompletableDeferred<Boolean>()
-        rebootConsentDeferred = deferred
-        _uiState.value = _uiState.value.copy(rebootConsentRequested = true)
-        return deferred.await()
-    }
-
-    fun respondToRebootConsent(accepted: Boolean) {
-        _uiState.value = _uiState.value.copy(rebootConsentRequested = false)
-        rebootConsentDeferred?.complete(accepted)
-        rebootConsentDeferred = null
-    }
-
-    private fun log(message: String) {
-        Log.d(TAG, message)
-        val timestamp = timeFormatter.format(Date())
-        val newLine = OTALogLine(text = "[$timestamp] $message")
-        _uiState.value = _uiState.value.copy(
-            logLines = _uiState.value.logLines + newLine
-        )
-    }
-
-    companion object {
-        private const val TAG = "CommandLineOTA"
-        private const val OTA_CHECKSUM_SIZE = 32 * 1024 // 32KB buffer for optimal I/O throughput
-        private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.US)
-        private val downloadingPattern = Pattern.compile("""UPDATE_STATUS_DOWNLOADING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
-        private val verifyingPattern = Pattern.compile("""UPDATE_STATUS_VERIFYING\s*\(\d+\),\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
-        private val genericProgressPattern = Pattern.compile("""(?:progress|PROGRESS)\s*[:=]\s*([0-9.]+)""", Pattern.CASE_INSENSITIVE)
-
-        private fun extractFraction(pattern: Pattern, line: String): Double? {
-            val matcher = pattern.matcher(line)
-            return if (matcher.find()) {
-                matcher.group(1)?.toDoubleOrNull()
-            } else null
-        }
-
-        fun convertFileToChecksum(filePath: String): Long {
-            // 1. Basic validation
-            if (filePath.isBlank()) {
-                Log.e(TAG, "CRC_CALC :: Path is blank")
-                return 0L
-            }
-
-            val file = File(filePath)
-            if (!file.exists()) {
-                Log.e(TAG, "CRC_CALC :: File not found: $filePath")
-                return 0L
-            }
-
-            val crc = CRC32()
-
-            return try {
-                // 2. Open stream and wrap in BufferedInputStream for speed
-                // .use {} automatically closes the stream even if an error occurs
-                FileInputStream(file).use { fis ->
-                    val bis = BufferedInputStream(fis)
-                    // 32KB buffer is the sweet spot for modern mobile storage (UFS)
-                    val buffer = ByteArray(OTA_CHECKSUM_SIZE)
-                    var bytesRead: Int
-
-                    while (bis.read(buffer).also { bytesRead = it } != -1) {
-                        // Update CRC with the actual number of bytes read
-                        crc.update(buffer, 0, bytesRead)
-                    }
-                }
-                // 3. Return the final calculated value
-                crc.value
-            } catch (e: Exception) {
-                Log.e(TAG, "CRC_CALC :: Error calculating CRC: ${e.message}", e)
-                0L
-            }
+        } else {
+            return@withContext Pair(false, "Update engine closed without success signal.")
         }
     }
 }

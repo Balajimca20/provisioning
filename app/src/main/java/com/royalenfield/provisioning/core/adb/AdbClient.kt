@@ -5,6 +5,7 @@ import dadb.AdbShellPacket
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
@@ -21,6 +22,11 @@ class AdbClient(
 ) {
     private var dadbInstance: Dadb? = null
 
+    // Remembered so restartAsRoot() can reconnect to the same target after adbd restarts —
+    // the root restart always kills the current TCP connection.
+    private var connectedHost: String? = null
+    private var connectedPort: Int = 5555
+
     val isConnected: Boolean
         get() = dadbInstance != null
 
@@ -32,6 +38,8 @@ class AdbClient(
                 val keyPair = keyPairProvider.getKeyPair()
                 val dadb = Dadb.create(host, port, keyPair)
                 dadbInstance = dadb
+                connectedHost = host
+                connectedPort = port
                 Log.d(TAG, "ADB Connection established")
                 AdbResult.Success(true)
             } catch (e: Exception) {
@@ -96,8 +104,15 @@ class AdbClient(
         }
         readerThread.start()
 
+        // Make sure a cancelled/closed collector actually tears down the underlying shell
+        // session and reader thread instead of leaking them — previously this was a no-op.
         awaitClose {
-            // Thread finishes when session closes or command ends
+            try {
+                session.close()
+            } catch (e: Exception) {
+                // Ignore — closing an already-finished session is fine.
+            }
+            readerThread.interrupt()
         }
     }
 
@@ -120,63 +135,106 @@ class AdbClient(
             }
         }
 
-    suspend fun restartAsRoot(): AdbResult<String> = withContext(Dispatchers.IO) {
+    /**
+     * Restarts adbd as root on the device (equivalent to `adb root`), using dadb's own root
+     * primitive rather than a plain shell command — there is no shell binary called "root" to
+     * invoke.
+     *
+     * Critically: requesting the restart drops the current TCP connection out from under us
+     * (adbd tears the socket down as it relaunches with different privileges), so the existing
+     * `dadbInstance` is dead the instant `dadb.root()` returns — reusing it (e.g. for an
+     * immediate `whoami` check) fails with "Broken pipe". A fresh connection has to be
+     * established once the daemon comes back up, mirroring the retry/reconnect loop the iOS
+     * client uses around its own `root:` service call.
+     */
+    suspend fun restartAsRoot(
+        reconnectAttempts: Int = 6,
+        reconnectDelayMs: Long = 1500
+    ): AdbResult<String> = withContext(Dispatchers.IO) {
         val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
+        val host = connectedHost
+        val port = connectedPort
+        if (host == null) return@withContext AdbResult.Failure("No known host to reconnect to after root restart")
+
+        Log.d(TAG, "Requesting adbd restart as root...")
         try {
-            Log.d(TAG, "Escalating root permissions...")
-            val rootRes = runShell("root")
-            if (rootRes is AdbResult.Success) {
-                return@withContext rootRes
-            }
-            // Check if already root via whoami or id -u
-            val whoamiRes = runShell("whoami || id -u")
-            if (whoamiRes is AdbResult.Success && (whoamiRes.data.contains("root") || whoamiRes.data.trim() == "0")) {
-                return@withContext AdbResult.Success("adbd is running as root")
-            }
-            // Non-blocking escalation warning
-            AdbResult.Success("Root escalation attempted (${(rootRes as? AdbResult.Failure)?.message ?: "status ok"})")
+            dadb.root()
         } catch (e: Exception) {
-            Log.w(TAG, "Root escalation error (non-fatal): ${e.message}")
-            AdbResult.Success("Root escalation skipped: ${e.message}")
+            // Some dadb versions throw here because the socket closes mid-call — that's the
+            // expected shape of this operation, not necessarily a real failure, so we don't
+            // bail out yet and instead try to reconnect below.
+            Log.d(TAG, "dadb.root() threw during restart (often expected mid-restart): ${e.message}")
+        }
+
+        // The old connection is dead either way — drop it and reconnect rather than reusing it.
+        try { dadb.close() } catch (e: Exception) { /* ignore */ }
+        dadbInstance = null
+
+        var lastFailureMessage: String? = null
+        repeat(reconnectAttempts) { attempt ->
+            if (dadbInstance != null) return@repeat // already succeeded on a prior iteration
+            delay(reconnectDelayMs)
+            Log.d(TAG, "Reconnect attempt ${attempt + 1}/$reconnectAttempts after root restart...")
+            when (val reconnectRes = connect(host, port)) {
+                is AdbResult.Success -> {
+                    val whoamiRes = runShell("whoami || id -u")
+                    val isRoot = whoamiRes is AdbResult.Success &&
+                            (whoamiRes.data.contains("root") || whoamiRes.data.trim() == "0")
+                    if (!isRoot) {
+                        lastFailureMessage = "reconnected but shell still reports non-root " +
+                                "(${(whoamiRes as? AdbResult.Success)?.data?.trim() ?: (whoamiRes as? AdbResult.Failure)?.message})"
+                        // Undo the connection so the next loop iteration reconnects cleanly.
+                        disconnect()
+                    }
+                }
+                is AdbResult.Failure -> {
+                    lastFailureMessage = reconnectRes.message
+                }
+            }
+        }
+
+        if (dadbInstance != null && isConnected) {
+            AdbResult.Success("adbd is running as root")
+        } else {
+            AdbResult.Failure(
+                "Root escalation failed: could not confirm root after $reconnectAttempts " +
+                        "reconnect attempts" + (lastFailureMessage?.let { " ($it)" } ?: "")
+            )
         }
     }
 
     suspend fun reboot(): AdbResult<String> = runShell("reboot")
 
+    /**
+     * Pushes a local file to the device via dadb's sync protocol. Unlike the previous
+     * implementation, this now returns Failure whenever the transfer did not actually
+     * complete — there is no shell `cp`/`cat` fallback, because localFile.absolutePath is a
+     * path on *this* app's device, not on the remote ADB target; a shell command referencing
+     * it can never succeed and was previously masking real transfer failures as Success.
+     */
     suspend fun pushFile(
         localFile: File,
         remotePath: String,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null
     ): AdbResult<Boolean> = withContext(Dispatchers.IO) {
-        val dadb = dadbInstance
+        val dadb = dadbInstance ?: return@withContext AdbResult.Failure("ADB not connected")
         val totalBytes = localFile.length()
         onProgress?.invoke(0L, totalBytes)
-        
+
         try {
             Log.d(TAG, "Pushing ${localFile.absolutePath} -> $remotePath ($totalBytes bytes)")
-            
-            if (dadb != null) {
-                try {
-                    // Try dadb direct push
-                    dadb.push(localFile, remotePath)
-                    onProgress?.invoke(totalBytes, totalBytes)
-                    return@withContext AdbResult.Success(true)
-                } catch (pushEx: Exception) {
-                    Log.w(TAG, "dadb.push failed or timed out (${pushEx.message}), attempting stream/shell copy fallback")
-                }
+            dadb.push(localFile, remotePath)
+
+            // Verify the remote file actually landed at the expected size instead of trusting
+            // a non-throwing push() call alone.
+            val verifyRes = runShell("stat -c %s '$remotePath' 2>/dev/null || wc -c < '$remotePath'")
+            val remoteSize = (verifyRes as? AdbResult.Success)?.data?.trim()?.toLongOrNull()
+            if (remoteSize != null && remoteSize != totalBytes) {
+                return@withContext AdbResult.Failure(
+                    "Push verification failed: remote size $remoteSize != local size $totalBytes"
+                )
             }
 
-            // Fallback 1: Stream chunks via base64 or cat if on same host or fallback file system
-            if (localFile.exists()) {
-                val copyCmd = "cp '${localFile.absolutePath}' '$remotePath' || cat '${localFile.absolutePath}' > '$remotePath'"
-                val copyRes = runShell(copyCmd)
-                if (copyRes is AdbResult.Success) {
-                    runShell("chmod 666 '$remotePath'")
-                    onProgress?.invoke(totalBytes, totalBytes)
-                    return@withContext AdbResult.Success(true)
-                }
-            }
-            
             onProgress?.invoke(totalBytes, totalBytes)
             AdbResult.Success(true)
         } catch (e: Exception) {
