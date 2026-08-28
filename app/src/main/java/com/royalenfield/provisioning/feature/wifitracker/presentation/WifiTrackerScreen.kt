@@ -1,8 +1,8 @@
 package com.royalenfield.provisioning.feature.wifitracker.presentation
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,13 +25,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.royalenfield.provisioning.feature.wifitracker.data.WifiLogRecord
 
-// Exact UI color palette
+// UI Color Palette
 private val BgDark = Color(0xFF0D1117)
 private val BoxBorderDark = Color(0xFF1F2937)
 private val CardBg = Color(0xFF111827)
@@ -48,7 +48,6 @@ private val CsvExcelBtnEmerald = Color(0xFF059669)
 
 private val ConsoleBackground = Color(0xFF050505)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WifiTrackerScreen(
     viewModel: WifiTrackerViewModel
@@ -154,7 +153,6 @@ fun WifiTrackerScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Generate New Password Button
                     Button(
                         onClick = { viewModel.generateNewPassword() },
                         enabled = !uiState.isChangingPassword,
@@ -166,7 +164,7 @@ fun WifiTrackerScreen(
                             containerColor = Color(0xFF0F243A),
                             disabledContainerColor = Color(0xFF091420)
                         ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0284C7)),
+                        border = BorderStroke(1.dp, Color(0xFF0284C7)),
                         contentPadding = PaddingValues(horizontal = 10.dp)
                     ) {
                         Row(
@@ -183,7 +181,6 @@ fun WifiTrackerScreen(
                         }
                     }
 
-                    // Display Box for Generated Password
                     Box(
                         modifier = Modifier
                             .weight(2f)
@@ -265,7 +262,7 @@ fun WifiTrackerScreen(
                     .padding(10.dp)
             ) {
                 Text(
-                    text = "Transaction Logs  CSV Export",
+                    text = "Transaction Logs CSV Export",
                     color = SectionHeaderCyan,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -276,7 +273,6 @@ fun WifiTrackerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // View Transaction Log Table Button
                     Button(
                         onClick = { viewModel.openLogBottomSheet() },
                         modifier = Modifier
@@ -284,7 +280,7 @@ fun WifiTrackerScreen(
                             .height(40.dp),
                         shape = RoundedCornerShape(4.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F243A)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0284C7)),
+                        border = BorderStroke(1.dp, Color(0xFF0284C7)),
                         contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -298,7 +294,6 @@ fun WifiTrackerScreen(
                         }
                     }
 
-                    // Export / Save CSV As... Button
                     Button(
                         onClick = { viewModel.exportCsv(context, openDirectly = false) },
                         modifier = Modifier
@@ -319,7 +314,6 @@ fun WifiTrackerScreen(
                         }
                     }
 
-                    // Open CSV in Excel Button
                     Button(
                         onClick = { viewModel.exportCsv(context, openDirectly = true) },
                         modifier = Modifier
@@ -342,7 +336,7 @@ fun WifiTrackerScreen(
                 }
             }
 
-            // 5. EXECUTION LOG CONSOLE SECTION (Matching Python HTML colored log tray)
+            // 5. EXECUTION LOG CONSOLE SECTION
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Execution Log Console",
@@ -381,7 +375,7 @@ fun WifiTrackerScreen(
                             Row(verticalAlignment = Alignment.Top) {
                                 Text(
                                     text = "[${logItem.timestamp}] ",
-                                    color = Color(0xFF6A9955), // Python timestamp green
+                                    color = Color(0xFF6A9955),
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp
@@ -400,7 +394,7 @@ fun WifiTrackerScreen(
             }
         }
 
-        // SUCCESS ALERT DIALOG (QMessageBox.information equivalent)
+        // SUCCESS ALERT DIALOG
         if (uiState.showSuccessDialog) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissSuccessDialog() },
@@ -418,14 +412,17 @@ fun WifiTrackerScreen(
                 },
                 text = {
                     Text(
-                        text = uiState.dialogMessage.ifEmpty { "Wi-Fi Password updated successfully!\nTarget device rebooting..." },
+                        text = uiState.dialogMessage.ifEmpty { "Successfully updated Wi-Fi passphrase!\nTarget device rebooting..." },
                         color = Color(0xFFE2E8F0),
                         fontSize = 13.sp
                     )
                 },
                 confirmButton = {
                     Button(
-                        onClick = { viewModel.dismissSuccessDialog() },
+                        onClick = {
+                            // Simply dismiss the dialog to remain on the exact same screen and tab
+                            viewModel.dismissSuccessDialog()
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
                     ) {
                         Text("OK", color = Color.White, fontWeight = FontWeight.Bold)
@@ -434,7 +431,7 @@ fun WifiTrackerScreen(
             )
         }
 
-        // ERROR / WARNING ALERT DIALOG (QMessageBox.warning / QMessageBox.critical equivalent)
+        // ERROR / WARNING ALERT DIALOG
         if (uiState.showErrorDialog) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissErrorDialog() },
@@ -468,7 +465,7 @@ fun WifiTrackerScreen(
             )
         }
 
-        // FULL-SCREEN TRANSACTION LOG VIEWER (Renders above native BottomBar)
+        // FULL-SCREEN TRANSACTION LOG VIEWER
         if (uiState.isLogBottomSheetOpen) {
             Dialog(
                 onDismissRequest = { viewModel.closeLogBottomSheet() },
@@ -497,9 +494,6 @@ fun WifiTrackerScreen(
     }
 }
 
-/**
- * Wi-Fi Password Transaction Log Viewer Bottom Sheet Dialog
- */
 @Composable
 private fun WifiTransactionLogDialogContent(
     uiState: WifiTrackerUiState,
@@ -516,9 +510,9 @@ private fun WifiTransactionLogDialogContent(
             val q = uiState.logSearchQuery.lowercase()
             uiState.transactionLogs.filter {
                 it.vin.lowercase().contains(q) ||
-                it.wifiSsid.lowercase().contains(q) ||
-                it.wifiMacId.lowercase().contains(q) ||
-                it.newWifiPassword.lowercase().contains(q)
+                        it.wifiSsid.lowercase().contains(q) ||
+                        it.wifiMacId.lowercase().contains(q) ||
+                        it.newWifiPassword.lowercase().contains(q)
             }
         }
     }
@@ -543,58 +537,54 @@ private fun WifiTransactionLogDialogContent(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black
                 )
+            }
 
-                // Close Icon View on Top-Right Corner
-                IconButton(onClick = onClose,) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color(0xFFEF4444),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Search Bar
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFF08101E))
+                .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Search Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF08101E))
-                    .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                BasicTextField(
-                    value = uiState.logSearchQuery,
-                    onValueChange = onSearchQueryChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = TextStyle(
-                        color = Color(0xFF93C5FD),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    ),
-                    cursorBrush = SolidColor(Color(0xFF60A5FA)),
-                    decorationBox = { innerTextField ->
-                        if (uiState.logSearchQuery.isEmpty()) {
-                            Text(
-                                text = "Filter by VIN, SSID, or MAC...",
-                                color = Color(0xFF3B82F6).copy(alpha = 0.5f),
-                                fontSize = 11.sp
-                            )
-                        }
-                        innerTextField()
+            Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            BasicTextField(
+                value = uiState.logSearchQuery,
+                onValueChange = onSearchQueryChanged,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = Color(0xFF93C5FD),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                ),
+                cursorBrush = SolidColor(Color(0xFF60A5FA)),
+                decorationBox = { innerTextField ->
+                    if (uiState.logSearchQuery.isEmpty()) {
+                        Text(
+                            text = "Filter by VIN, SSID, or MAC...",
+                            color = Color(0xFF3B82F6).copy(alpha = 0.5f),
+                            fontSize = 11.sp
+                        )
                     }
-                )
-            }
+                    innerTextField()
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -654,7 +644,10 @@ private fun WifiTransactionLogDialogContent(
                             .width(760.dp)
                             .fillMaxHeight()
                     ) {
-                        itemsIndexed(filteredLogs) { index, record ->
+                        itemsIndexed(
+                            items = filteredLogs,
+                            key = { index, record -> "${record.vin}_${record.timestamp}_$index" }
+                        ) { index, record ->
                             val rowBg = if (index % 2 == 0) Color(0xFF070B18) else Color(0xFF0A1024)
                             Row(
                                 modifier = Modifier
@@ -683,7 +676,6 @@ private fun WifiTransactionLogDialogContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Refresh Log Button
             Button(
                 onClick = onRefresh,
                 modifier = Modifier.height(34.dp),
@@ -694,7 +686,6 @@ private fun WifiTransactionLogDialogContent(
                 Text("🔄 Refresh Log", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Export / Save CSV As... Button
             Button(
                 onClick = onExportCsv,
                 modifier = Modifier.height(34.dp),
@@ -705,7 +696,6 @@ private fun WifiTransactionLogDialogContent(
                 Text("💾 Export / Save CSV As...", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Open in Excel Button
             Button(
                 onClick = onOpenExcel,
                 modifier = Modifier.height(34.dp),
@@ -720,7 +710,7 @@ private fun WifiTransactionLogDialogContent(
 }
 
 @Composable
-private fun TableHeaderCell(text: String, width: androidx.compose.ui.unit.Dp) {
+private fun TableHeaderCell(text: String, width: Dp) {
     Text(
         text = text,
         color = Color(0xFF38BDF8),
@@ -734,7 +724,7 @@ private fun TableHeaderCell(text: String, width: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun TableDataCell(
     text: String,
-    width: androidx.compose.ui.unit.Dp,
+    width: Dp,
     color: Color = Color(0xFFE2E8F0)
 ) {
     Text(

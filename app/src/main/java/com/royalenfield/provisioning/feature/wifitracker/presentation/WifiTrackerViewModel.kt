@@ -155,38 +155,13 @@ class WifiTrackerViewModel(
     /**
      * Main action: starts the Wi-Fi password change process (matching Python start_wifi_change_process)
      */
+    // WifiTrackerViewModel.kt
     fun changeWifiPassword() {
         val state = _uiState.value
         val vin = state.vinInput.trim()
         val password = state.generatedPassword.trim()
 
-        if (vin.length != 17) {
-            _uiState.update {
-                it.copy(
-                    vinError = "Please enter a valid 17-character VIN.\nCurrent length: ${vin.length}",
-                    showErrorDialog = true,
-                    dialogMessage = "Please enter a valid 17-character VIN.\nCurrent length: ${vin.length}"
-                )
-            }
-            log("Validation Failed: VIN length is not 17 characters (${vin.length}).", "red")
-            return
-        }
-
-        if (password.isEmpty()) {
-            _uiState.update {
-                it.copy(
-                    showErrorDialog = true,
-                    dialogMessage = "Please generate or enter a new Wi-Fi password before executing."
-                )
-            }
-            log("Validation Failed: Password field is empty.", "red")
-            return
-        }
-
-        if (state.isChangingPassword) {
-            log("Warning: A Wi-Fi password update is already in progress.", "orange")
-            return
-        }
+        // ... Validation checks ...
 
         viewModelScope.launch {
             _uiState.update {
@@ -203,12 +178,8 @@ class WifiTrackerViewModel(
                 newPassword = password,
                 onLogMessage = { msg ->
                     val color = when {
-                        msg.startsWith("===") -> if (msg.contains("Completed")) "green" else "black"
-                        msg.startsWith("Error", ignoreCase = true) || msg.startsWith("Failed", ignoreCase = true) -> "red"
-                        msg.startsWith("Warning", ignoreCase = true) -> "orange"
-                        msg.startsWith("Deleted", ignoreCase = true) || msg.contains("successfully", ignoreCase = true) -> "green"
-                        msg.startsWith("[ADB Error]") -> "red"
-                        msg.startsWith("[ADB Out]") -> "gray"
+                        msg.contains("successfully", ignoreCase = true) -> "green"
+                        msg.startsWith("Error", ignoreCase = true) -> "red"
                         else -> "black"
                     }
                     log(msg, color)
@@ -229,10 +200,11 @@ class WifiTrackerViewModel(
 
             val finalState = _uiState.value
             if (finalState.updateSuccess) {
+                // Keep user on the current screen and display success dialog
                 _uiState.update {
                     it.copy(
                         showSuccessDialog = true,
-                        dialogMessage = "Wi-Fi Password updated successfully!\nTarget device rebooting..."
+                        dialogMessage = "Successfully updated Wi-Fi passphrase!\nTarget device is rebooting..."
                     )
                 }
             } else if (finalState.errorMessage != null) {

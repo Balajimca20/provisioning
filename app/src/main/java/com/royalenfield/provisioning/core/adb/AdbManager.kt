@@ -3,13 +3,15 @@ package com.royalenfield.provisioning.core.adb
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.io.IOException
+import java.net.SocketException
 import java.util.Locale
 
 sealed class AdbManagerResult {
-    // macAddress added: WifiUpdateWorkflow.kt reads result.macAddress, which didn't exist on
-    // this type before — that was a compile-blocking mismatch, not just a missing feature.
     data class Success(val ssid: String, val macAddress: String = "N/A", val message: String) : AdbManagerResult()
     data class Failure(val message: String) : AdbManagerResult()
 }
@@ -25,8 +27,8 @@ class AdbManager(
     }
 
     suspend fun verifyRootAccess(): Boolean = withContext(Dispatchers.IO) {
-        when (val result = adbClient.runShell("su 0 id")) {
-            is AdbResult.Success -> result.data.contains("uid=0(root)")
+        when (adbClient.restartAsRoot()) {
+            is AdbResult.Success -> true
             is AdbResult.Failure -> false
         }
     }
@@ -47,12 +49,6 @@ class AdbManager(
         }
     }
 
-    /**
-     * Reads the device's Wi-Fi hardware MAC directly from sysfs — matches the Python
-     * reference's fallback (`cat /sys/class/net/wlan1/address`) for when the SoftAP XML
-     * doesn't carry a usable MAC entry. Previously called from WifiTrackerViewModel but never
-     * defined here.
-     */
     suspend fun getHardwareMacAddress(): String = withContext(Dispatchers.IO) {
         when (val result = adbClient.runShell("cat /sys/class/net/wlan1/address")) {
             is AdbResult.Success -> {
@@ -66,7 +62,6 @@ class AdbManager(
         }
     }
 
-    /** Unchanged — left exactly as before. */
     suspend fun updateSoftApCredentials(
         newSsid: String,
         newPassphrase: String,
@@ -74,9 +69,9 @@ class AdbManager(
     ): AdbManagerResult = withContext(Dispatchers.IO) {
         try {
             onLog("Verifying ADB root privileges...")
-            val hasRoot = verifyRootAccess()
-            if (!hasRoot) {
-                return@withContext AdbManagerResult.Failure("Vehicle device does not have su 0 root permission")
+            val rootRes = adbClient.restartAsRoot()
+            if (rootRes is AdbResult.Failure) {
+                return@withContext AdbManagerResult.Failure("Vehicle device does not have ADB root permission: ${rootRes.message}")
             }
 
             onLog("Pulling remote SoftAP XML config...")
@@ -98,8 +93,8 @@ class AdbManager(
             }
 
             onLog("Setting permissions (chmod 600)...")
-            adbClient.runShell("su 0 chmod 600 $REMOTE_SOFTAP_XML")
-            adbClient.runShell("su 0 chown wifi:wifi $REMOTE_SOFTAP_XML")
+            adbClient.runShell("chmod 600 $REMOTE_SOFTAP_XML")
+            adbClient.runShell("chown wifi:wifi $REMOTE_SOFTAP_XML")
 
             onLog("SoftAP XML successfully written! Device reboot will apply new credentials.")
             localXmlFile.delete()
@@ -111,17 +106,6 @@ class AdbManager(
         }
     }
 
-    /**
-     * Wi-Fi Tracker workflow: matches the Python `WifiUpdateWorker.run()` step-by-step —
-     * verify root, pull XML, update ONLY the passphrase (SSID is left untouched, unlike
-     * updateSoftApCredentials above), resolve MAC, push, chmod/chown, reboot.
-     *
-     * Previously missing entirely — WifiUpdateWorkflow.kt called this and it didn't exist.
-     *
-     * Reports progress two ways, both live/real-time rather than only before/after:
-     *  - onLog: a human-readable console line after every step (feeds the terminal-style log)
-     *  - onStepProgress: a (label, percent) pair after every step (feeds the progress bar)
-     */
     suspend fun executeWifiPasswordUpdate(
         vin: String,
         newPassword: String,
@@ -131,23 +115,27 @@ class AdbManager(
         try {
             onLog("=== Starting Wi-Fi Password Update Workflow (VIN: $vin) ===")
 
-            onStepProgress("Step 1/6: Verifying root access...", 10)
-            onLog("Verifying ADB root privileges...")
-            val hasRoot = verifyRootAccess()
-            if (!hasRoot) {
-                onLog("Error: Vehicle device does not have su 0 root permission")
-                return@withContext AdbManagerResult.Failure("Vehicle device does not have su 0 root permission")
+            onStepProgress("Step 1/6: Acquiring root permissions on the device...", 10)
+            onLog("Acquiring root permissions on the Android device...")
+            val rootResult = adbClient.restartAsRoot()
+            if (rootResult is AdbResult.Failure) {
+                onLog("Error: Root escalation failed: ${rootResult.message}")
+                return@withContext AdbManagerResult.Failure("Root escalation failed: ${rootResult.message}")
             }
+            onLog("Root confirmed: ${(rootResult as AdbResult.Success).data}")
 
             onStepProgress("Step 2/6: Pulling remote SoftAP XML config...", 28)
             onLog("Pulling remote SoftAP XML config...")
             val localXmlFile = File(context.cacheDir, "wifi_tracker_softap_${System.currentTimeMillis()}.xml")
-            when (val pullRes = adbClient.pull(REMOTE_SOFTAP_XML, localXmlFile)) {
-                is AdbResult.Failure -> {
-                    onLog("[ADB Error]: Failed to pull XML: ${pullRes.message}")
-                    return@withContext AdbManagerResult.Failure("Failed to pull XML: ${pullRes.message}")
+            try {
+                withRetry("Pull $REMOTE_SOFTAP_XML", onLog) {
+                    val pullRes = adbClient.pull(REMOTE_SOFTAP_XML, localXmlFile)
+                    if (pullRes is AdbResult.Failure) throw IllegalStateException(pullRes.message)
                 }
-                is AdbResult.Success -> onLog("Pull complete.")
+                onLog("Pull complete.")
+            } catch (e: Exception) {
+                onLog("[ADB Error]: Failed to pull XML: ${e.message}")
+                return@withContext AdbManagerResult.Failure("Failed to pull XML: ${e.message}")
             }
 
             onStepProgress("Step 3/6: Parsing XML & updating passphrase...", 45)
@@ -175,26 +163,27 @@ class AdbManager(
 
             onStepProgress("Step 5/6: Pushing updated SoftAP XML to vehicle...", 70)
             onLog("Pushing updated SoftAP XML to vehicle partition...")
-            when (val pushRes = adbClient.push(localXmlFile, REMOTE_SOFTAP_XML)) {
-                is AdbResult.Failure -> {
-                    onLog("[ADB Error]: Failed to push XML: ${pushRes.message}")
-                    return@withContext AdbManagerResult.Failure("Failed to push XML: ${pushRes.message}")
+            try {
+                withRetry("Push $REMOTE_SOFTAP_XML", onLog) {
+                    val pushRes = adbClient.push(localXmlFile, REMOTE_SOFTAP_XML)
+                    if (pushRes is AdbResult.Failure) throw IllegalStateException(pushRes.message)
                 }
-                is AdbResult.Success -> onLog("Push complete.")
+                onLog("Push complete.")
+            } catch (e: Exception) {
+                onLog("[ADB Error]: Failed to push XML: ${e.message}")
+                return@withContext AdbManagerResult.Failure("Failed to push XML: ${e.message}")
             }
 
             onStepProgress("Step 6/6: Setting permissions & rebooting device...", 88)
             onLog("Setting permissions (chmod 600)...")
-            adbClient.runShell("su 0 chmod 600 $REMOTE_SOFTAP_XML")
-            adbClient.runShell("su 0 chown wifi:wifi $REMOTE_SOFTAP_XML")
+            adbClient.runShell("chmod 600 $REMOTE_SOFTAP_XML")
+            adbClient.runShell("chown wifi:wifi $REMOTE_SOFTAP_XML")
 
             localXmlFile.delete()
-            onLog("SoftAP XML successfully written! Rebooting target device via 'su 0 reboot'...")
-            val rebootRes = adbClient.runShell("su 0 reboot")
-            if (rebootRes is AdbResult.Failure) {
-                // Non-fatal: the XML write already succeeded; a dropped connection during/after
-                // reboot is the expected outcome here, not a real failure.
-                onLog("Note: reboot command reported '${rebootRes.message}' (device may already be restarting).")
+            onLog("SoftAP XML successfully written! Rebooting target device...")
+            val rebootRes = adbClient.reboot()
+            if (rebootRes) {
+                onLog("Note: reboot command reported '${rebootRes}' (device may already be restarting).")
             }
 
             AdbManagerResult.Success(
@@ -209,8 +198,70 @@ class AdbManager(
         }
     }
 
+    private suspend fun <T> withRetry(
+        description: String,
+        onLog: (String) -> Unit,
+        timeoutMs: Long = 30_000,
+        attempts: Int = 3,
+        operation: suspend () -> T
+    ): T {
+        var lastError: Exception = IllegalStateException("$description failed")
+        for (attempt in 1..attempts) {
+            try {
+                return withTimeout(timeoutMs) { operation() }
+            } catch (e: Exception) {
+                lastError = e
+                onLog("⚠️ $description attempt $attempt failed: ${e.message}")
+                if (attempt < attempts) {
+                    ensureConnected(onLog)
+                }
+            }
+        }
+        throw lastError
+    }
+
+    private suspend fun ensureConnected(onLog: (String) -> Unit) {
+        val responsive = try {
+            withTimeout(5_000) {
+                val res = adbClient.runShell("echo online")
+                (res as? AdbResult.Success)?.data?.lowercase(Locale.US)?.contains("online") == true
+            }
+        } catch (e: Exception) {
+            false
+        }
+        if (responsive) return
+
+        onLog("🔗 Reconnecting ADB…")
+        for (attempt in 1..3) {
+            val reconnectRes = adbClient.reconnect()
+            if (reconnectRes is AdbResult.Success) {
+                val rootRes = adbClient.restartAsRoot()
+                if (rootRes is AdbResult.Success) {
+                    onLog("✅ Reconnected.")
+                    return
+                }
+            }
+            onLog("⚠️ Reconnect attempt $attempt failed.")
+            delay(1500)
+        }
+        onLog("❌ Could not reconnect to the device.")
+    }
+
     suspend fun rebootDevice(): AdbResult<String> {
-        return adbClient.runShell("su 0 reboot")
+        return try {
+            adbClient.reboot()
+            // Successfully sent reboot command
+            AdbResult.Success("Reboot command sent successfully. Device is restarting.")
+        } catch (e: SocketException) {
+            // Expected behavior: Target device closed the socket immediately upon rebooting
+            AdbResult.Success("Reboot command acknowledged. Device connection closed.")
+        } catch (e: IOException) {
+            // Handle secondary I/O drops caused by sudden shutdown
+            AdbResult.Success("Reboot initiated; connection dropped as expected.")
+        } catch (e: Exception) {
+            // Unexpected failures (e.g., ADB permission denied, invalid state)
+            AdbResult.Failure(e.message ?: "Failed to execute reboot command")
+        }
     }
 
     private fun extractXmlStringValue(xml: String, vararg names: String): String? {
@@ -235,10 +286,6 @@ class AdbManager(
         return updated
     }
 
-    /**
-     * Updates ONLY the passphrase, leaving SSID and everything else untouched — matches the
-     * Python reference, which only ever rewrites `<string name="Passphrase">`.
-     */
     private fun replacePassphraseOnly(xml: String, newPass: String): String {
         val passphraseRegex = Regex("(<string name=\"Passphrase\">)(.*?)(</string>)")
         return if (passphraseRegex.containsMatchIn(xml)) {
@@ -246,7 +293,6 @@ class AdbManager(
                 "${match.groupValues[1]}$newPass${match.groupValues[3]}"
             }
         } else {
-            // Passphrase tag missing entirely — append one, matching the Python fallback.
             if (xml.contains("</WifiConfigStoreSoftAp>")) {
                 xml.replace(
                     "</WifiConfigStoreSoftAp>",

@@ -94,6 +94,9 @@ class VehicleNetworkConnectionHelper(
             networkCallback?.let {
                 connectivityManager.unregisterNetworkCallback(it)
             }
+        } catch (e: IllegalArgumentException) {
+            // Handle case where callback was already unregistered or never successfully registered
+            Log.w(TAG, "NetworkCallback was not registered: ${e.message}")
         } catch (e: Exception) {
             Log.w(TAG, "Error unregistering network callback: ${e.message}")
         } finally {

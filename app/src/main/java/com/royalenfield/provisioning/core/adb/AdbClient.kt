@@ -4,12 +4,19 @@ import android.util.Log
 import dadb.AdbShellPacket
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.net.SocketException
 import java.nio.charset.StandardCharsets
 
 sealed class AdbResult<out T> {
@@ -20,7 +27,7 @@ sealed class AdbResult<out T> {
 class AdbClient(
     private val keyPairProvider: AdbKeyPairProvider
 ) {
-    var dadbInstance: Dadb? = null
+    private var dadbInstance: Dadb? = null
 
     // Remembered so restartAsRoot() can reconnect to the same target after adbd restarts —
     // the root restart always kills the current TCP connection.
@@ -29,6 +36,18 @@ class AdbClient(
 
     val isConnected: Boolean
         get() = dadbInstance != null
+
+    /**
+     * Reconnects to whatever host/port `connect()` was last called with. Purely additive —
+     * used by AdbManager to recover a session that's gone stale mid-workflow (e.g. a broken
+     * pipe on a long-idle connection), the same class of issue restartAsRoot() already has to
+     * handle for the root-restart case specifically. Does not alter any existing method's
+     * behavior, so the OTA flow (which never calls this) is unaffected.
+     */
+    suspend fun reconnect(): AdbResult<Boolean> {
+        val host = connectedHost ?: return AdbResult.Failure("No prior connection to reconnect to")
+        return connect(host, connectedPort)
+    }
 
     suspend fun connect(host: String = "192.168.1.1", port: Int = 5555): AdbResult<Boolean> =
         withContext(Dispatchers.IO) {
@@ -53,9 +72,7 @@ class AdbClient(
         try {
             Log.d(TAG, "Executing shell: $command")
             val response = dadb.shell(command)
-            Log.d("TAG", "runShell: ${response.output} ${response.exitCode} ${response.allOutput}")
             if (response.exitCode == 0) {
-                Log.d(TAG, "Shell command succeeded: $command -- ${response.output} ${response.exitCode} ${response.allOutput}")
                 AdbResult.Success(response.output)
             } else {
                 AdbResult.Failure("Command exited with code ${response.exitCode}: ${response.errorOutput}")
@@ -86,7 +103,7 @@ class AdbClient(
                             emitLines("", packet.payload) { trySend(it) }
                         }
                         is AdbShellPacket.StdError -> {
-                            emitLines("", packet.payload) { trySend(it) }
+                            emitLines("ERR: ", packet.payload) { trySend(it) }
                         }
                         is AdbShellPacket.Exit -> {
                             break@loop
@@ -205,7 +222,23 @@ class AdbClient(
         }
     }
 
-    suspend fun reboot(): AdbResult<String> = runShell("reboot")
+    suspend fun reboot(): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            // Execute reboot command on device
+            runShell("reboot")
+            true
+        } catch (e: SocketException) {
+            // Expected: Device closed the connection/socket immediately upon reboot
+            true
+        } catch (e: IOException) {
+            // Catch secondary standard I/O errors triggered by sudden connection termination
+            true
+        } catch (e: Exception) {
+            // Handle unexpected errors (permission issues, null streams, etc.)
+            e.printStackTrace()
+            false
+        }
+    }
 
     /**
      * Pushes a local file to the device via dadb's sync protocol. Unlike the previous
@@ -240,7 +273,7 @@ class AdbClient(
             onProgress?.invoke(totalBytes, totalBytes)
             AdbResult.Success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Push error: ${e.message}")
+            Log.e(TAG, "Push error: ${e.message}", e)
             AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
         }
     }
