@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -543,40 +545,61 @@ private fun WifiTransactionLogDialogContent(
                 )
             }
 
-            // Search Bar
             Row(
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(34.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF08101E))
-                    .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                BasicTextField(
-                    value = uiState.logSearchQuery,
-                    onValueChange = onSearchQueryChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = TextStyle(
-                        color = Color(0xFF93C5FD),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    ),
-                    cursorBrush = SolidColor(Color(0xFF60A5FA)),
-                    decorationBox = { innerTextField ->
-                        if (uiState.logSearchQuery.isEmpty()) {
-                            Text(
-                                text = "Filter by VIN, SSID, or MAC...",
-                                color = Color(0xFF3B82F6).copy(alpha = 0.5f),
-                                fontSize = 11.sp
-                            )
+                // Search Bar
+                Row(
+                    modifier = Modifier
+                        .width(260.dp)
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF08101E))
+                        .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    BasicTextField(
+                        value = uiState.logSearchQuery,
+                        onValueChange = onSearchQueryChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = Color(0xFF93C5FD),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        ),
+                        cursorBrush = SolidColor(Color(0xFF60A5FA)),
+                        decorationBox = { innerTextField ->
+                            if (uiState.logSearchQuery.isEmpty()) {
+                                Text(
+                                    text = "Filter by VIN, SSID, or MAC...",
+                                    color = Color(0xFF3B82F6).copy(alpha = 0.5f),
+                                    fontSize = 11.sp
+                                )
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
-                    }
-                )
+                    )
+                }
+
+                // Close Icon View on Top-Right Corner
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF1E293B))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 
@@ -663,53 +686,40 @@ private fun WifiTransactionLogDialogContent(
         // Dialog Footer Actions
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Refresh Log Button
-                Button(
-                    onClick = onRefresh,
-                    modifier = Modifier.height(34.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text("🔄 Refresh Log", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
-                // Export / Save CSV As... Button
-                Button(
-                    onClick = onExportCsv,
-                    modifier = Modifier.height(34.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text("💾 Export / Save CSV As...", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
-                // Open in Excel Button
-                Button(
-                    onClick = onOpenExcel,
-                    modifier = Modifier.height(34.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
-                ) {
-                    Text("🟢 Open in Excel", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Close Button
+            // Refresh Log Button
             Button(
-                onClick = onClose,
+                onClick = onRefresh,
                 modifier = Modifier.height(34.dp),
                 shape = RoundedCornerShape(4.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C)),
-                contentPadding = PaddingValues(horizontal = 12.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
+                contentPadding = PaddingValues(horizontal = 10.dp)
             ) {
-                Text("❌ Close", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("🔄 Refresh Log", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Export / Save CSV As... Button
+            Button(
+                onClick = onExportCsv,
+                modifier = Modifier.height(34.dp),
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) {
+                Text("💾 Export / Save CSV As...", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Open in Excel Button
+            Button(
+                onClick = onOpenExcel,
+                modifier = Modifier.height(34.dp),
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) {
+                Text("🟢 Open in Excel", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
