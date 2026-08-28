@@ -52,7 +52,7 @@ val repositoryModule = module {
     single { WifiChangeLogRepository(androidContext()) }
     single { OtaRepository(httpClient = get(), adbClient = get()) }
     single { SupplierFeedRepository(graphQLClient = get(), httpClient = get()) }
-    single { ProvisioningRepository(get()) }
+    single { ProvisioningRepository(get(),androidContext()) }
 }
 
 val domainModule = module {

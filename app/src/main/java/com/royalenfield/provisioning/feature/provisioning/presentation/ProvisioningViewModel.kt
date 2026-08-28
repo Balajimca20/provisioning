@@ -99,9 +99,9 @@ class ProvisioningViewModel(
 
 
     private fun log(message: String) {
-        _logs.value = _logs.value + "[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(
-            Date()
-        )}] $message"
+        _logs.value += "[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(
+                    Date()
+                )}] $message"
     }
 
     fun updateVinNumber(vin: String) {
@@ -146,17 +146,17 @@ class ProvisioningViewModel(
                 // 4. Register cloud metadata
                 log("☁️ Registering Cloud Metadata...")
                 _status.value = ProvisioningStatus.Running("Registering Cloud Metadata", 20)
-                val isRegistered = repository.registerVehicleMetadata(
-                    vin = _provisioningUiState.value.vinNumber,
-                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
-                    modelDesc = _provisioningUiState.value.selectedVariant.description,
-                    region = _provisioningUiState.value.selectedRegion.regionName,
-                    country = _provisioningUiState.value.selectedRegion.country
-                ).getOrDefault(false)
-
-                if (!isRegistered) {
-                    log("⚠️ Cloud registration returned unexpected status")
-                }
+//                val isRegistered = repository.registerVehicleMetadata(
+//                    vin = _provisioningUiState.value.vinNumber,
+//                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
+//                    modelDesc = _provisioningUiState.value.selectedVariant.description,
+//                    region = _provisioningUiState.value.selectedRegion.regionName,
+//                    country = _provisioningUiState.value.selectedRegion.country
+//                ).getOrDefault(false)
+//
+//                if (!isRegistered) {
+//                    log("⚠️ Cloud registration returned unexpected status")
+//                }
 
                 // 5. Clear telemetry buffer
                 log("🧹 Clearing target buffers...")
@@ -206,19 +206,30 @@ class ProvisioningViewModel(
             log("📤 Pushing ${index + 1}/${payloadFiles.size}: ${file.name}")
             val fileStartBytes = uploadedBytes
 
-            adbClient.pushFile(file, "/mnt/vendor/persist/c2c/${file.name}") { sent, total ->
-                val overallSent = fileStartBytes + sent
-                val uploadPercent = if (totalBytes > 0) (overallSent * 100 / totalBytes).toInt() else 0
+            val adbPush = adbClient.pushFile(file,"/mnt/vendor/persist/c2c/${file.name}")
 
-                // Upload represents 30% -> 85% range in the UI
-                val progress = 30 + (uploadPercent * 55 / 100)
-                _status.value = ProvisioningStatus.Running(
-                    "Pushing ${index + 1}/${payloadFiles.size}: ${file.name}",
-                    progress
-                )
+            when(adbPush){
+                is AdbResult.Failure -> {
+                    Log.e("TAG", "pushPayloadFiles: ${adbPush.message}")
+                }
+                is AdbResult.Success -> {
+                    Log.e("TAG", "pushPayloadFiles: ${adbPush.data}")
+                }
             }
 
-            uploadedBytes += file.length()
+//            adbClient.pushFile(file, "/mnt/vendor/persist/c2c/${file.name}") { sent, total ->
+//                val overallSent = fileStartBytes + sent
+//                val uploadPercent = if (totalBytes > 0) (overallSent * 100 / totalBytes).toInt() else 0
+//
+//                // Upload represents 30% -> 85% range in the UI
+//                val progress = 30 + (uploadPercent * 55 / 100)
+//                _status.value = ProvisioningStatus.Running(
+//                    "Pushing ${index + 1}/${payloadFiles.size}: ${file.name}",
+//                    progress
+//                )
+//            }
+//
+//            uploadedBytes += file.length()
             log("✅ Pushed ${file.name}")
         }
     }
