@@ -28,7 +28,6 @@ import com.royalenfield.provisioning.BuildConfig
 import com.royalenfield.provisioning.core.config.EnvironmentConfig
 import com.royalenfield.provisioning.core.theme.*
 import com.royalenfield.provisioning.feature.dashboard.presentation.AdbSetupScreen
-import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardFunctionalScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
@@ -44,9 +43,8 @@ import org.koin.androidx.compose.koinViewModel
 sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
     object WifiSetup : Screen("wifi_setup", "Wi-Fi Setup")
     object AdbSetup : Screen("adb_setup", "ADB Setup")
-    
+
     // Core functional screens
-    object Dashboard : Screen("dashboard", "Stats", Icons.Default.Dashboard)
     object Ota : Screen("ota", "OTA Flash", Icons.Default.SystemUpdateAlt)
     object Wifi : Screen("wifi", "Wi-Fi Tracker", Icons.Default.Wifi)
     object SupplierFeed : Screen("supplier_feed", "Supplier", Icons.Default.DeviceHub)
@@ -78,7 +76,7 @@ fun MainAppContent() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showVariantDialog by remember { mutableStateOf(false) }
-    
+
     // Shared Connectivity State
     val dashboardViewModel: DashboardViewModel = koinViewModel()
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -101,8 +99,8 @@ fun MainAppContent() {
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkBackground,
         topBar = {
-            val isSetupScreen = currentRoute == Screen.WifiSetup.route || 
-                              currentRoute == Screen.AdbSetup.route
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route ||
+                    currentRoute == Screen.AdbSetup.route
             if (!isSetupScreen) {
                 TopAppBar(
                     title = {
@@ -129,8 +127,8 @@ fun MainAppContent() {
         },
         bottomBar = {
             // Navigation bar only shown when ADB is linked and we are out of setup
-            val isSetupScreen = currentRoute == Screen.WifiSetup.route || 
-                              currentRoute == Screen.AdbSetup.route
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route ||
+                    currentRoute == Screen.AdbSetup.route
             if (uiState.isAdbConnected && !isSetupScreen) {
                 NavigationBar(containerColor = DarkSurface) {
                     serviceNavItems.forEach { screen ->
@@ -168,7 +166,7 @@ fun MainAppContent() {
                 WifiSetupScreen(
                     viewModel = dashboardViewModel,
                     onWifiConnected = {
-                        navController.navigate(Screen.Dashboard.route) {
+                        navController.navigate(serviceNavItems.first().route) {
                             launchSingleTop = true
                         }
                     },
@@ -184,7 +182,7 @@ fun MainAppContent() {
                 AdbSetupScreen(
                     viewModel = dashboardViewModel,
                     onAdbConnected = {
-                        navController.navigate(Screen.Dashboard.route) {
+                        navController.navigate(serviceNavItems.first().route) {
                             launchSingleTop = true
                         }
                     },
@@ -196,21 +194,14 @@ fun MainAppContent() {
                 )
             }
 
-            composable(Screen.Dashboard.route) {
-                DashboardFunctionalScreen(
-                    viewModel = dashboardViewModel,
-                    onNavigateToModule = { route -> navController.navigate(route) }
-                )
+            composable(Screen.Ota.route) {
+                val viewModel: CommandLineOTAViewModel = koinViewModel()
+                CommandLineOTAView(viewModel = viewModel)
             }
 
             composable(Screen.Wifi.route) {
                 val viewModel: WifiTrackerViewModel = koinViewModel()
                 WifiTrackerScreen(viewModel = viewModel)
-            }
-
-            composable(Screen.Ota.route) {
-                val viewModel: CommandLineOTAViewModel = koinViewModel()
-                CommandLineOTAView(viewModel = viewModel)
             }
 
             composable(Screen.SupplierFeed.route) {
