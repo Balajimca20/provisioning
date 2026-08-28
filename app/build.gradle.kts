@@ -14,75 +14,26 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-    }
 
-    // --- Environment flavors (DEV, UAT, PROD) with unique application IDs, manifest placeholders & config ---
-    flavorDimensions += "env"
-    productFlavors {
-        create("dev") {
-            dimension = "env"
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
-            manifestPlaceholders["appName"] = "FF Provisioning (DEV)"
-            manifestPlaceholders["envName"] = "DEV"
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        manifestPlaceholders["appName"] = "FF Provisioning"
+        manifestPlaceholders["envName"] = "PROD"
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
 
-            buildConfigField("String", "BUILD_VARIANT", "\"dev\"")
-            buildConfigField("String", "ENVIRONMENT_NAME", "\"DEV\"")
-            buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_DEV")}\"")
-            buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_DEV")}\"")
-            buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_DEV")}\"")
-            buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEV")}\"")
-            buildConfigField("boolean", "IS_DEV", "true")
-            buildConfigField("boolean", "IS_UAT", "false")
-            buildConfigField("boolean", "IS_PROD", "false")
-            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
-            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
-        }
-        create("uat") {
-            dimension = "env"
-            applicationIdSuffix = ".uat"
-            versionNameSuffix = "-uat"
-            manifestPlaceholders["appName"] = "FF Provisioning (UAT)"
-            manifestPlaceholders["envName"] = "UAT"
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
-
-            buildConfigField("String", "BUILD_VARIANT", "\"uat\"")
-            buildConfigField("String", "ENVIRONMENT_NAME", "\"UAT\"")
-            buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_UAT")}\"")
-            buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_UAT")}\"")
-            buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_UAT")}\"")
-            buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_UAT")}\"")
-            buildConfigField("boolean", "IS_DEV", "false")
-            buildConfigField("boolean", "IS_UAT", "true")
-            buildConfigField("boolean", "IS_PROD", "false")
-            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
-            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
-        }
-        create("prod") {
-            dimension = "env"
-            isDefault = true
-            manifestPlaceholders["appName"] = "FF Provisioning"
-            manifestPlaceholders["envName"] = "PROD"
-            manifestPlaceholders["usesCleartextTraffic"] = "false"
-
-            buildConfigField("String", "BUILD_VARIANT", "\"prod\"")
-            buildConfigField("String", "ENVIRONMENT_NAME", "\"PROD\"")
-            buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_PROD")}\"")
-            buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_PROD")}\"")
-            buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_PROD")}\"")
-            buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEFAULT")}\"")
-            buildConfigField("boolean", "IS_DEV", "false")
-            buildConfigField("boolean", "IS_UAT", "false")
-            buildConfigField("boolean", "IS_PROD", "true")
-            buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
-            buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "false")
-        }
+        buildConfigField("String", "BUILD_VARIANT", "\"prod\"")
+        buildConfigField("String", "ENVIRONMENT_NAME", "\"PROD\"")
+        buildConfigField("String", "FF_BASE_URL", "\"${prop("URL_FF_PROD")}\"")
+        buildConfigField("String", "PROVISION_BASE_URL", "\"${prop("URL_PROVISION_PROD")}\"")
+        buildConfigField("String", "SUPPLIER_FEED_API_KEY", "\"${prop("API_KEY_PROD")}\"")
+        buildConfigField("String", "OTA_API_KEY", "\"${prop("API_KEY_OTA_DEFAULT")}\"")
+        buildConfigField("boolean", "IS_DEV", "false")
+        buildConfigField("boolean", "IS_UAT", "false")
+        buildConfigField("boolean", "IS_PROD", "true")
+        buildConfigField("boolean", "ENABLE_MOCK_FALLBACK", "false")
+        buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
     }
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".debug"
             isDebuggable = true
             isMinifyEnabled = false
         }

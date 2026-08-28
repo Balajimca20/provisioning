@@ -80,7 +80,7 @@ fun OtaScreen(
                     border = BorderStroke(1.dp, BlueAccent.copy(alpha = 0.3f))
                 ) {
                     Text(
-                        text = "A/B REDUNDANT",
+                        text = "A/B REDUNDANCY",
                         color = BlueAccent,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
@@ -244,7 +244,7 @@ fun OtaScreen(
             }
         }
         
-        // --- Package Picker ---
+        // --- Package Picker (Only shown when IDLE) ---
         if (uiState.pipelineStage == "IDLE") {
             Text(
                 text = "FIRMWARE CATALOG",

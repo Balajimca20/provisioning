@@ -66,7 +66,6 @@ import com.royalenfield.provisioning.core.theme.TextSecondary
 import com.royalenfield.provisioning.feature.dashboard.presentation.AdbSetupScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardFunctionalScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
-import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAViewModel
@@ -75,19 +74,18 @@ import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierF
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalScreen
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalViewModel
-import com.royalenfield.provisioning.feature.wifi.presentation.WifiScreen
-import com.royalenfield.provisioning.feature.wifi.presentation.WifiViewModel
+import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTrackerScreen
+import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTrackerViewModel
 import org.koin.androidx.compose.koinViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
-    object Landing : Screen("landing", "Welcome")
     object WifiSetup : Screen("wifi_setup", "Wi-Fi Setup")
     object AdbSetup : Screen("adb_setup", "ADB Setup")
     
     // Core functional screens
     object Dashboard : Screen("dashboard", "Stats", Icons.Default.Dashboard)
-    object Wifi : Screen("wifi", "SoftAP", Icons.Default.Wifi)
     object Ota : Screen("ota", "OTA Flash", Icons.Default.SystemUpdateAlt)
+    object Wifi : Screen("wifi", "Wi-Fi Tracker", Icons.Default.Wifi)
     object SupplierFeed : Screen("supplier_feed", "Supplier", Icons.Default.DeviceHub)
     object Terminal : Screen("terminal", "ADB Shell", Icons.Default.Terminal)
 
@@ -95,8 +93,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
 }
 
 val serviceNavItems = listOf(
-    Screen.Wifi,
     Screen.Ota,
+    Screen.Wifi,
     Screen.SupplierFeed,
 //    Screen.Terminal,
     Screen.SystemProvisioning
@@ -129,20 +127,11 @@ fun MainAppContent() {
 
     // Automatically navigate to Wifi or ADB screen whenever disconnected based on status
     LaunchedEffect(uiState.isWifiConnected, uiState.isAdbConnected, currentRoute) {
-        if (currentRoute != Screen.Landing.route) {
-            if (!uiState.isWifiConnected) {
-                if (currentRoute != Screen.WifiSetup.route) {
-                    navController.navigate(Screen.WifiSetup.route) {
-                        popUpTo(Screen.Landing.route) { inclusive = false }
-                        launchSingleTop = true
-                    }
-                }
-            } else if (!uiState.isAdbConnected) {
-                if (currentRoute != Screen.AdbSetup.route && currentRoute != Screen.WifiSetup.route) {
-                    navController.navigate(Screen.AdbSetup.route) {
-                        popUpTo(Screen.Landing.route) { inclusive = false }
-                        launchSingleTop = true
-                    }
+        if (!uiState.isWifiConnected) {
+            if (currentRoute != Screen.WifiSetup.route) {
+                navController.navigate(Screen.WifiSetup.route) {
+                    popUpTo(Screen.WifiSetup.route) { inclusive = true }
+                    launchSingleTop = true
                 }
             }
         }
@@ -152,32 +141,35 @@ fun MainAppContent() {
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkBackground,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.TwoWheeler, contentDescription = null, tint = RedPrimary)
-                        Text(text = "FF PROVISIONING", color = RedPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
-                    }
-                },
-                actions = {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = env.badgeBackground,
-                        modifier = Modifier.padding(end = 12.dp).clickable { showVariantDialog = true }
-                    ) {
-                        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(modifier = Modifier.size(6.dp).background(env.badgeColor, shape = RoundedCornerShape(3.dp)))
-                            Text(text = EnvironmentConfig.formattedVariantDisplay, color = env.badgeColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route ||
+                              currentRoute == Screen.AdbSetup.route
+            if (!isSetupScreen) {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(imageVector = Icons.Default.TwoWheeler, contentDescription = null, tint = RedPrimary)
+                            Text(text = "FF PROVISIONING", color = RedPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
-            )
+                    },
+                    actions = {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = env.badgeBackground,
+                            modifier = Modifier.padding(end = 12.dp).clickable { showVariantDialog = true }
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(modifier = Modifier.size(6.dp).background(env.badgeColor, shape = RoundedCornerShape(3.dp)))
+                                Text(text = EnvironmentConfig.formattedVariantDisplay, color = env.badgeColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
+                )
+            }
         },
         bottomBar = {
             // Navigation bar only shown when ADB is linked and we are out of setup
-            val isSetupScreen = currentRoute == Screen.Landing.route || 
-                              currentRoute == Screen.WifiSetup.route || 
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route ||
                               currentRoute == Screen.AdbSetup.route
             if (uiState.isAdbConnected && !isSetupScreen) {
                 NavigationBar(containerColor = DarkSurface) {
@@ -209,18 +201,21 @@ fun MainAppContent() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Landing.route,
+            startDestination = Screen.WifiSetup.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Landing.route) {
-                LandingScreen(onStartSetup = { navController.navigate(Screen.WifiSetup.route) })
-            }
-
             composable(Screen.WifiSetup.route) {
                 WifiSetupScreen(
                     viewModel = dashboardViewModel,
                     onWifiConnected = {
-                        navController.navigate(Screen.AdbSetup.route)
+                        navController.navigate(Screen.Dashboard.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
                     }
                 )
             }
@@ -229,12 +224,15 @@ fun MainAppContent() {
                 AdbSetupScreen(
                     viewModel = dashboardViewModel,
                     onAdbConnected = {
-                        // After bridge established, move to dashboard and clear setup flow
                         navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Landing.route) { inclusive = true }
+                            launchSingleTop = true
                         }
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
                 )
             }
 
@@ -246,8 +244,8 @@ fun MainAppContent() {
             }
 
             composable(Screen.Wifi.route) {
-                val viewModel: WifiViewModel = koinViewModel()
-                WifiScreen(viewModel = viewModel)
+                val viewModel: WifiTrackerViewModel = koinViewModel()
+                WifiTrackerScreen(viewModel = viewModel)
             }
 
             composable(Screen.Ota.route) {
