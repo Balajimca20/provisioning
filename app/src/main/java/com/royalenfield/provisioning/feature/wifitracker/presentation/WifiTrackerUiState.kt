@@ -17,9 +17,9 @@ data class WifiTrackerUiState(
     val generatedPassword: String = "",
     val isPasswordGenerated: Boolean = false,
 
-    // Target Wi-Fi & MAC Details
-    val targetSsid: String = "RE_LXHD_250925",
-    val targetMacId: String = "02:00:00:44:55:66",
+    // Target Wi-Fi & MAC Details (Live from device / ADB)
+    val targetSsid: String = "",
+    val targetMacId: String = "",
 
     // Execution & Progress State
     val isChangingPassword: Boolean = false,
@@ -29,9 +29,7 @@ data class WifiTrackerUiState(
     val errorMessage: String? = null,
 
     // Execution Console Logs
-    val consoleLogs: List<ConsoleLogItem> = listOf(
-        ConsoleLogItem("11:37:15", "Application initialized. Ready for VIN entry.", "#808080")
-    ),
+    val consoleLogs: List<ConsoleLogItem> = emptyList(),
 
     // Dialogs
     val showSuccessDialog: Boolean = false,
@@ -44,17 +42,15 @@ data class WifiTrackerUiState(
     val transactionLogs: List<WifiLogRecord> = emptyList(),
 
     // Legacy fields for backward compatibility
-    val currentSsid: String = "RE_LXHD_250925",
-    val currentSecurity: String = "WPA2-PSK",
-    val currentBand: String = "5 GHz (Channel 36)",
-    val newSsidInput: String = "RE_LXHD_250925",
+    val currentSsid: String = "",
+    val currentSecurity: String = "",
+    val currentBand: String = "",
+    val newSsidInput: String = "",
     val newPassphraseInput: String = "",
     val validationError: String? = null,
     val isUpdating: Boolean = false,
     val rawXmlContent: String = "",
     val isReadingXml: Boolean = false,
     val auditLogs: List<WifiLogRecord> = emptyList(),
-    val executionLogs: List<String> = listOf(
-        "[11:37:15] Application initialized. Ready for VIN entry."
-    )
+    val executionLogs: List<String> = emptyList()
 )

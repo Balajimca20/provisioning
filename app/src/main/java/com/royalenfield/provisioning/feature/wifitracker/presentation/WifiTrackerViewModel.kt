@@ -31,6 +31,17 @@ class WifiTrackerViewModel(
     private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     init {
+        val now = timeFormatter.format(Date())
+        _uiState.update {
+            it.copy(
+                consoleLogs = listOf(
+                    ConsoleLogItem(now, "Application initialized. Ready for VIN entry.", "#808080")
+                ),
+                executionLogs = listOf(
+                    "[$now] Application initialized. Ready for VIN entry."
+                )
+            )
+        }
         loadAuditLogs()
         fetchDeviceWifiDetails()
     }
@@ -131,8 +142,12 @@ class WifiTrackerViewModel(
                         _uiState.update { it.copy(targetSsid = ssid, currentSsid = ssid) }
                     }
                 }
+                val mac = adbManager.getHardwareMacAddress()
+                if (mac.isNotEmpty() && mac != "N/A") {
+                    _uiState.update { it.copy(targetMacId = mac) }
+                }
             } catch (e: Exception) {
-                // Keep default simulated/provisioned SSID
+                // Real-time device queries
             }
         }
     }

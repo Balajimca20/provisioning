@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.royalenfield.provisioning.feature.wifitracker.data.WifiLogRecord
 
 // Exact UI color palette
@@ -464,23 +466,30 @@ fun WifiTrackerScreen(
             )
         }
 
-        // BOTTOM SHEET DIALOG (2nd SCREENSHOT / TRANSACTION LOG VIEWER)
+        // FULL-SCREEN TRANSACTION LOG VIEWER (Renders above native BottomBar)
         if (uiState.isLogBottomSheetOpen) {
-            ModalBottomSheet(
+            Dialog(
                 onDismissRequest = { viewModel.closeLogBottomSheet() },
-                containerColor = Color(0xFF0F1424),
-                dragHandle = null,
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                modifier = Modifier.fillMaxHeight(0.85f)
-            ) {
-                WifiTransactionLogDialogContent(
-                    uiState = uiState,
-                    onSearchQueryChanged = { viewModel.onLogSearchQueryChanged(it) },
-                    onRefresh = { viewModel.loadAuditLogs() },
-                    onExportCsv = { viewModel.exportCsv(context, openDirectly = false) },
-                    onOpenExcel = { viewModel.exportCsv(context, openDirectly = true) },
-                    onClose = { viewModel.closeLogBottomSheet() }
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    decorFitsSystemWindows = false
                 )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .systemBarsPadding()
+                ) {
+                    WifiTransactionLogDialogContent(
+                        uiState = uiState,
+                        onSearchQueryChanged = { viewModel.onLogSearchQueryChanged(it) },
+                        onRefresh = { viewModel.loadAuditLogs() },
+                        onExportCsv = { viewModel.exportCsv(context, openDirectly = false) },
+                        onOpenExcel = { viewModel.exportCsv(context, openDirectly = true) },
+                        onClose = { viewModel.closeLogBottomSheet() }
+                    )
+                }
             }
         }
     }
@@ -637,11 +646,11 @@ private fun WifiTransactionLogDialogContent(
                                     .border(0.5.dp, Color(0xFF1E293B).copy(alpha = 0.5f))
                                     .padding(vertical = 7.dp)
                             ) {
-                                TableDataCell(text = record.vin.ifEmpty { "RE-2025-DEV-01" }, width = 160.dp, color = Color(0xFF38BDF8))
-                                TableDataCell(text = record.wifiSsid.ifEmpty { "RE_LXHD_250925" }, width = 150.dp)
-                                TableDataCell(text = record.newWifiPassword.ifEmpty { "Royal@2025" }, width = 160.dp, color = Color(0xFF4ADE80))
-                                TableDataCell(text = record.wifiMacId.ifEmpty { "02:00:00:44:55:66" }, width = 140.dp)
-                                TableDataCell(text = record.timestamp.ifEmpty { "2026-08-28 11:37" }, width = 150.dp, color = Color(0xFF94A3B8))
+                                TableDataCell(text = record.vin.ifEmpty { "-" }, width = 160.dp, color = Color(0xFF38BDF8))
+                                TableDataCell(text = record.wifiSsid.ifEmpty { "-" }, width = 150.dp)
+                                TableDataCell(text = record.newWifiPassword.ifEmpty { "-" }, width = 160.dp, color = Color(0xFF4ADE80))
+                                TableDataCell(text = record.wifiMacId.ifEmpty { "-" }, width = 140.dp)
+                                TableDataCell(text = record.timestamp.ifEmpty { "-" }, width = 150.dp, color = Color(0xFF94A3B8))
                             }
                         }
                     }

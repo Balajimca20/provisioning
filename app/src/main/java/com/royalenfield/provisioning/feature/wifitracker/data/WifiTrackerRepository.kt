@@ -33,31 +33,14 @@ class WifiTrackerRepository(
 
     suspend fun getLogs(): List<WifiLogRecord> = withContext(Dispatchers.IO) {
         if (!jsonLogFile.exists()) {
-            // Seed initial records if both files are empty
-            seedInitialLogIfEmpty()
+            return@withContext emptyList()
         }
         try {
             val content = jsonLogFile.readText()
+            if (content.isBlank()) return@withContext emptyList()
             json.decodeFromString<List<WifiLogRecord>>(content)
         } catch (e: Exception) {
             emptyList()
-        }
-    }
-
-    private fun seedInitialLogIfEmpty() {
-        val initialRecord = WifiLogRecord(
-            vin = "ME3HUNTER350N20250",
-            wifiSsid = "RE_LXHD_250925",
-            newWifiPassword = "Royal@2025!",
-            wifiMacId = "02:00:00:44:55:66",
-            timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
-            status = "SUCCESS"
-        )
-        try {
-            jsonLogFile.writeText(json.encodeToString(listOf(initialRecord)))
-            writeRecordToCsv(initialRecord)
-        } catch (e: Exception) {
-            // Ignore
         }
     }
 
