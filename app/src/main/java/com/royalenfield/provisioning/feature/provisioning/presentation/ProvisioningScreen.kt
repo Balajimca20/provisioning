@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.royalenfield.provisioning.core.theme.FfMechanicTheme
@@ -102,7 +105,9 @@ private fun ProvisioningScreenPreview() {
             onSelectVariant = {},
             onStartProvisioning = {_,_->},
             onStopProvisioning = {},
-            onAddLogs = {}
+            onAddLogs = {},
+            rebootConvernDialog = false,
+            onSendRebootConsent = {}
         )
     }
 }
@@ -114,6 +119,8 @@ fun ProvisioningRoute(
     val provisioningStatus = provisioningViewModel.status.collectAsStateWithLifecycle()
     val provisioningLogs = provisioningViewModel.logs.collectAsStateWithLifecycle()
     val provisioningUiState = provisioningViewModel.provisioningUiState.collectAsStateWithLifecycle()
+    
+    val rebootConvernDialog = provisioningViewModel.requestAdbDialog.collectAsStateWithLifecycle(false)
 
     ProvisioningScreen(
         vinNumber = provisioningUiState.value.vinNumber,
@@ -140,6 +147,10 @@ fun ProvisioningRoute(
         },
         onAddLogs = {
             provisioningViewModel.onPostLog(it)
+        },
+        rebootConvernDialog = rebootConvernDialog.value,
+        onSendRebootConsent = {
+            provisioningViewModel.onSendRebootConsent(it)
         }
     )
 }
@@ -153,12 +164,14 @@ fun ProvisioningScreen(
     provisioningLogs: List<String>,
     progress: Float,
 
-    onChangeVinNumber:(String)-> Unit,
-    onSelectRegion :(Region)-> Unit,
-    onSelectVariant :(VehicleVariant)-> Unit,
-    onStartProvisioning:(String,List<File>)-> Unit,
-    onStopProvisioning:()-> Unit,
-    onAddLogs:(String)-> Unit
+    onChangeVinNumber: (String) -> Unit,
+    onSelectRegion: (Region) -> Unit,
+    onSelectVariant: (VehicleVariant) -> Unit,
+    onStartProvisioning: (String, List<File>) -> Unit,
+    onStopProvisioning: () -> Unit,
+    onAddLogs: (String) -> Unit,
+    rebootConvernDialog: Boolean,
+    onSendRebootConsent:(Boolean)-> Unit
 ) {
     var variantExpanded by remember { mutableStateOf(false) }
     var regionExpanded by remember { mutableStateOf(false) }
@@ -179,6 +192,64 @@ fun ProvisioningScreen(
             }
         }
     }
+
+    var showRebootDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(
+        key1 = rebootConvernDialog,
+    ) {
+        showRebootDialog = rebootConvernDialog
+    }
+
+
+    if (showRebootDialog){
+        Dialog(
+            onDismissRequest = {}
+        ) {
+            Card(
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        "⚠️ Prompting operator user for hardware reboot consent...",
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = {
+                                showRebootDialog = false
+                                onSendRebootConsent(false)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(8.dp)
+                        ) {
+                            Text("Cancel")
+                        }
+
+                        Button(
+                            onClick = {
+                                showRebootDialog = false
+                                onSendRebootConsent(true)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(8.dp)
+                        ) {
+                            Text("Ok")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     Column(
         modifier = Modifier

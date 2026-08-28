@@ -13,7 +13,6 @@ import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
 import com.royalenfield.provisioning.feature.provisioning.data.repository.ProvisioningRepository
 import com.royalenfield.provisioning.feature.provisioning.presentation.ProvisioningViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.data.SupplierFeedRepository
-import com.royalenfield.provisioning.feature.supplierfeed.domain.FetchTelemetryUseCase
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalViewModel
 import com.royalenfield.provisioning.feature.wifitracker.data.WifiTrackerRepository
@@ -97,7 +96,7 @@ val viewModelModule = module {
         )
     }
 
-    viewModel { ProvisioningViewModel(get(),get())}
+    viewModel { ProvisioningViewModel(get(),get(),get())}
 }
 
 val appModules = listOf(

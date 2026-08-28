@@ -125,14 +125,14 @@ fun MainAppContent() {
 
     // Automatically navigate to Wifi or ADB screen whenever disconnected based on status
     LaunchedEffect(uiState.isWifiConnected, uiState.isAdbConnected, currentRoute) {
-        if (!uiState.isWifiConnected) {
-            if (currentRoute != Screen.WifiSetup.route) {
-                navController.navigate(Screen.WifiSetup.route) {
-                    popUpTo(Screen.WifiSetup.route) { inclusive = true }
-                    launchSingleTop = true
-                }
-            }
-        }
+//        if (!uiState.isWifiConnected) {
+//            if (currentRoute != Screen.WifiSetup.route) {
+//                navController.navigate(Screen.WifiSetup.route) {
+//                    popUpTo(Screen.WifiSetup.route) { inclusive = true }
+//                    launchSingleTop = true
+//                }
+//            }
+//        }
     }
 
     Scaffold(

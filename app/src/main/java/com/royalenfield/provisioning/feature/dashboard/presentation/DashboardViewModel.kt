@@ -95,6 +95,8 @@ class DashboardViewModel(
 
     fun connectWifi() {
         val currentState = _uiState.value
+        CurrentSSIDAndPasswordDetails.ssidInput = currentState.ssidInput
+        CurrentSSIDAndPasswordDetails.passwordInput = currentState.passwordInput
         val error = SsidValidator.getValidationError(currentState.ssidInput)
         if (error != null) {
             _uiState.update { it.copy(ssidValidationError = error) }
