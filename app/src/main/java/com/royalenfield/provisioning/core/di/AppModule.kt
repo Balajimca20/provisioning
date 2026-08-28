@@ -16,9 +16,9 @@ import com.royalenfield.provisioning.feature.supplierfeed.data.SupplierFeedRepos
 import com.royalenfield.provisioning.feature.supplierfeed.domain.FetchTelemetryUseCase
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalViewModel
-import com.royalenfield.provisioning.feature.wifi.data.WifiChangeLogRepository
-import com.royalenfield.provisioning.feature.wifi.domain.WifiUpdateWorkflow
-import com.royalenfield.provisioning.feature.wifi.presentation.WifiViewModel
+import com.royalenfield.provisioning.feature.wifitracker.data.WifiTrackerRepository
+import com.royalenfield.provisioning.feature.wifitracker.domain.WifiUpdateWorkflow
+import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTrackerViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
@@ -47,7 +47,7 @@ val adbModule = module {
 }
 
 val repositoryModule = module {
-    single { WifiChangeLogRepository(androidContext()) }
+    single { WifiTrackerRepository(androidContext()) }
     single { OtaRepository(httpClient = get(), adbClient = get()) }
     single { SupplierFeedRepository(graphQLClient = get(), httpClient = get()) }
 }
@@ -68,7 +68,7 @@ val viewModelModule = module {
     }
 
     viewModel {
-        WifiViewModel(
+        WifiTrackerViewModel(
             workflow = get(),
             logRepository = get(),
             adbManager = get()

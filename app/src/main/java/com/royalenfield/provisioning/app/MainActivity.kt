@@ -40,8 +40,8 @@ import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierF
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalScreen
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalViewModel
-import com.royalenfield.provisioning.feature.wifi.presentation.WifiScreen
-import com.royalenfield.provisioning.feature.wifi.presentation.WifiViewModel
+import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTrackerScreen
+import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTrackerViewModel
 import org.koin.androidx.compose.koinViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
@@ -208,8 +208,8 @@ fun MainAppContent() {
             }
 
             composable(Screen.Wifi.route) {
-                val viewModel: WifiViewModel = koinViewModel()
-                WifiScreen(viewModel = viewModel)
+                val viewModel: WifiTrackerViewModel = koinViewModel()
+                WifiTrackerScreen(viewModel = viewModel)
             }
 
             composable(Screen.Ota.route) {
