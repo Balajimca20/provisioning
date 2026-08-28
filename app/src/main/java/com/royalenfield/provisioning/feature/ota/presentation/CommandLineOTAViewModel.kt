@@ -11,6 +11,8 @@ import com.royalenfield.provisioning.feature.ota.domain.OTAPayloadInfo
 import com.royalenfield.provisioning.feature.ota.domain.OTAZipInspector
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -305,18 +307,55 @@ class CommandLineOTAViewModel(
             _uiState.value = _uiState.value.copy(progress = 0.5)
         } else {
             val startTime = System.currentTimeMillis()
-            val pushResult = adbClient.pushFile(localZipFile, remoteZipPath) { sent, total ->
-                val fraction = if (total > 0) sent.toDouble() / total.toDouble() else 0.0
-                _uiState.value = _uiState.value.copy(progress = 0.05 + fraction * 0.45)
+
+            // Push runs on a background job; a sibling polling loop reads the growing remote
+            // file size via `stat` every 500ms to produce real intermediate progress.
+            // adbClient.push() (no callback) is used so the existing pushFile() is untouched.
+            var pushSuccess = true
+            var pushError: String? = null
+
+            coroutineScope {
+                val pushJob = async(Dispatchers.IO) {
+                    adbClient.push(localZipFile, remoteZipPath)
+                }
+
+                // Poll remote size while push is in flight
+                while (pushJob.isActive) {
+                    delay(500L)
+                    if (!pushJob.isActive) break
+                    val statRes = adbClient.runShell(
+                        "stat -c %s '$remoteZipPath' 2>/dev/null || echo 0"
+                    )
+                    val remoteBytes = (statRes as? AdbResult.Success)
+                        ?.data?.trim()?.toLongOrNull() ?: 0L
+                    val fraction = if (localSize > 0) remoteBytes.coerceIn(0L, localSize).toDouble() / localSize else 0.0
+                    val transferredMB = String.format(Locale.US, "%.1f", remoteBytes / (1024.0 * 1024.0))
+                    val totalMB      = String.format(Locale.US, "%.1f", localSize   / (1024.0 * 1024.0))
+                    _uiState.value = _uiState.value.copy(
+                        progress   = 0.05 + fraction * 0.45,
+                        statusText = "🚀 PUSHING… $transferredMB / $totalMB MB (${String.format(Locale.US, "%.0f", fraction * 100)}%)"
+                    )
+                }
+
+                // Collect push result
+                when (val result = pushJob.await()) {
+                    is AdbResult.Failure -> {
+                        pushSuccess = false
+                        pushError = result.message
+                    }
+                    is AdbResult.Success -> {
+                        _uiState.value = _uiState.value.copy(progress = 0.5)
+                    }
+                }
             }
-            // pushFile now returns Failure whenever the transfer didn't actually complete
-            // (including the previously-silent case where nothing was really pushed) — no
-            // change needed here, this check now means what it always should have.
-            if (pushResult is AdbResult.Failure) {
-                log("❌ Push failed: ${pushResult.message}")
-                return@withContext Pair(false, "Transfer failed: ${pushResult.message}")
+
+            if (!pushSuccess) {
+                log("❌ Push failed: $pushError")
+                return@withContext Pair(false, "Transfer failed: $pushError")
             }
-            log("✅ Staged $localSize bytes in ${((System.currentTimeMillis() - startTime)/1000.0)}s.")
+
+            val elapsed = String.format(Locale.US, "%.1f", (System.currentTimeMillis() - startTime) / 1000.0)
+            log("✅ Staged $localSize bytes in ${elapsed}s.")
             _uiState.value = _uiState.value.copy(progress = 0.5)
         }
 
