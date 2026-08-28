@@ -32,20 +32,10 @@ android {
         buildConfigField("boolean", "ENABLE_DEBUG_LOGGING", "true")
     }
 
-    signingConfigs {
-        create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-
     buildTypes {
         getByName("debug") {
             isDebuggable = true
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debugConfig")
         }
         getByName("release") {
             isMinifyEnabled = false

@@ -34,8 +34,6 @@ import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScree
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAViewModel
-import com.royalenfield.provisioning.feature.ota.presentation.OtaScreen
-import com.royalenfield.provisioning.feature.ota.presentation.OtaViewModel
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedScreen
 import com.royalenfield.provisioning.feature.supplierfeed.presentation.SupplierFeedViewModel
 import com.royalenfield.provisioning.feature.terminal.presentation.TerminalScreen
@@ -51,15 +49,15 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     
     // Core functional screens
     object Dashboard : Screen("dashboard", "Stats", Icons.Default.Dashboard)
-    object Wifi : Screen("wifi", "SoftAP", Icons.Default.Wifi)
     object Ota : Screen("ota", "OTA Flash", Icons.Default.SystemUpdateAlt)
+    object Wifi : Screen("wifi", "Wi-Fi Tracker", Icons.Default.Wifi)
     object SupplierFeed : Screen("supplier_feed", "Supplier", Icons.Default.DeviceHub)
     object Terminal : Screen("terminal", "ADB Shell", Icons.Default.Terminal)
 }
 
 val serviceNavItems = listOf(
-    Screen.Wifi,
     Screen.Ota,
+    Screen.Wifi,
     Screen.SupplierFeed,
     Screen.Terminal
 )
