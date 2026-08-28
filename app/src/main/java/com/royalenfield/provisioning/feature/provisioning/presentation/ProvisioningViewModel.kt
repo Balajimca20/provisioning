@@ -5,17 +5,28 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.royalenfield.provisioning.core.adb.AdbClient
 import com.royalenfield.provisioning.core.adb.AdbResult
+import com.royalenfield.provisioning.core.network.VehicleNetworkConnectionHelper
+import com.royalenfield.provisioning.core.validation.SsidValidator
+import com.royalenfield.provisioning.feature.dashboard.presentation.CurrentSSIDAndPasswordDetails
+import com.royalenfield.provisioning.feature.dashboard.presentation.CurrentSSIDAndPasswordDetails.adbHostInput
+import com.royalenfield.provisioning.feature.dashboard.presentation.CurrentSSIDAndPasswordDetails.adbPortInput
 import com.royalenfield.provisioning.feature.provisioning.data.repository.ProvisioningRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -32,6 +43,7 @@ sealed class ProvisioningStatus {
 class ProvisioningViewModel(
     private val repository: ProvisioningRepository,
     private val adbClient: AdbClient,
+    private val networkHelper: VehicleNetworkConnectionHelper,
 ) : ViewModel() {
 
     private val _provisioningUiState = MutableStateFlow(ProvisioningStateModel())
@@ -42,6 +54,9 @@ class ProvisioningViewModel(
 
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
+
+    private val _requestAdbDialog = MutableSharedFlow<Boolean>(0)
+    val requestAdbDialog = _requestAdbDialog.asSharedFlow()
 
     private var provisioningJob: Job? = null
 
@@ -69,31 +84,53 @@ class ProvisioningViewModel(
 
     private suspend fun monitorTelemetryState() {
         log("🔍 Monitoring telemetry state...")
+        when (
+            val result = adbClient.runShell(
+                "cat /mnt/vendor/persist/c2c/c2c_vehicle.json"
+            )
+        ) {
+            is AdbResult.Success -> {
+                val output = result.data
+               // log("📡 Telemetry JSON: $output")
+                Log.e("TAG", "monitorTelemetryState: $output")
 
-        while (true) {
-            when (
-                val result = adbClient.runShell(
-                    "cat /mnt/vendor/persist/c2c/c2c_vehicle.json"
-                )
-            ) {
-                is AdbResult.Success -> {
-                    val output = result.data
-                    log("📡 Telemetry JSON: $output")
+                // Parse and extract system_state from C2C_Vehicle object
+                try {
+                    val json = Json { ignoreUnknownKeys = true; isLenient = true }
+                    val root = json.parseToJsonElement(output).jsonObject
+                    val c2cVehicle = root["C2C_Vehicle"]?.jsonObject
 
-                    if (output.contains("PRE_REGIONAL_ACTIVE")) {
+                    val systemState  = c2cVehicle?.get("system_state")?.jsonPrimitive?.content
+                    val guid         = c2cVehicle?.get("guid")?.jsonPrimitive?.content
+                    val pkgVersion   = c2cVehicle?.get("pkg_version")?.jsonPrimitive?.content
+                    val programId    = c2cVehicle?.get("program_id")?.jsonPrimitive?.content
+                    val gblUrlCloud  = c2cVehicle?.get("gbl_url_cloud")?.jsonPrimitive?.content
+                    val systemName   = c2cVehicle?.get("systemName")?.jsonPrimitive?.content
+
+                    log("📊 system_state  : $systemState")
+                    log("🔑 guid          : $guid")
+                    log("📦 pkg_version   : $pkgVersion")
+                    log("🆔 program_id    : $programId")
+                    log("🌐 gbl_url_cloud : $gblUrlCloud")
+                    log("👤 systemName    : $systemName")
+
+                    if (systemState == "PRE_REGIONAL_ACTIVE") {
                         log("🏆 Target State [PRE_REGIONAL_ACTIVE] Detected!")
-                        break
+                    } else {
+                        log("⏳ Current system_state: $systemState — waiting for PRE_REGIONAL_ACTIVE")
                     }
-                }
-
-                is AdbResult.Failure -> {
-                    log("❌ Failed to read telemetry state: ${result}")
+                } catch (e: Exception) {
+                    log("⚠️ Failed to parse telemetry JSON: ${e.message}")
+                    Log.e("TAG", "monitorTelemetryState parse error", e)
                 }
             }
 
-            delay(2000) // Suspension point that checks for cancellation
+            is AdbResult.Failure -> {
+                log("State updated : ${result.message}")
+            }
         }
 
+        delay(2000)
         log("🛑 Telemetry monitoring stopped")
     }
 
@@ -186,14 +223,10 @@ class ProvisioningViewModel(
                 _status.value = ProvisioningStatus.Running("Validating payload files", 90)
                 validatePayloadFiles(payloadFiles)
 
+                clearingSharedPrefs()
                 // 8. Reboot
-                log("🔄 Rebooting device...")
-                _status.value = ProvisioningStatus.Running("Rebooting device", 95)
-                adbClient.runShell("reboot")
 
-                // 9. Monitor telemetry
-                log("🛰️ Monitoring Telemetry JSON...")
-                monitorTelemetryState()
+
 
                 // 10. Success
                 _status.value = ProvisioningStatus.Success("Provisioning completed successfully!")
@@ -204,6 +237,61 @@ class ProvisioningViewModel(
                 } else {
                     log("❌ Provisioning failed: ${e.message}")
                     _status.value = ProvisioningStatus.Error(e.message ?: "Execution failed")
+                }
+            }
+        }
+    }
+
+    suspend fun clearingSharedPrefs(){
+        log("🧹 Clearing shared prefs...")
+        adbClient.runShell("rm -rf /data/vendor/c2c/shared_prefs/*")
+        adbClient.runShell("sync")
+        log("❓ WAITING FOR REBOOT CONSENT...")
+        log("❓ Prompting operator user for hardware reboot consent..")
+
+        _requestAdbDialog.emit(true)
+    }
+
+    fun onSendRebootConsent(concern: Boolean) {
+        viewModelScope.launch {
+            if (concern){
+                log("Consent received. Requesting device hardware reboot...")
+                log("🔄 Rebooting device...")
+                _status.value = ProvisioningStatus.Running("Rebooting device", 95)
+                adbClient.runShell("reboot")
+
+                log("✅ Reboot initiated. waiting for wifi reconnection to ${CurrentSSIDAndPasswordDetails.ssidInput}...")
+
+                connectWifi()
+            }
+        }
+
+    }
+
+    fun connectWifi() {
+        networkHelper.connect(
+            ssid = CurrentSSIDAndPasswordDetails.ssidInput,
+            passphrase = CurrentSSIDAndPasswordDetails.passwordInput
+        )
+        connectAdb()
+    }
+
+    fun connectAdb() {
+        viewModelScope.launch {
+            val port = adbPortInput.toIntOrNull() ?: 5555
+            when (val res = adbClient.connect(adbHostInput, port)) {
+                is AdbResult.Success -> {
+                    log("✅ ADB connected")
+
+                    // 9. Monitor telemetry
+                    log("🛰️ Monitoring Telemetry JSON...")
+                    adbClient.restartAsRoot()
+                    monitorTelemetryState()
+
+                }
+
+                is AdbResult.Failure -> {
+                    log("❌ ADB connection failed: ${res.message}")
                 }
             }
         }

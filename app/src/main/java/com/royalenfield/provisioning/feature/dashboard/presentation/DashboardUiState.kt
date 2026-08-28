@@ -4,7 +4,7 @@ data class DashboardUiState(
     val isSetupStarted: Boolean = false,
     
     // Step 1: Wi-Fi Connection
-    val ssidInput: String = "RE_3EJQ_250925",
+    val ssidInput: String = "RE_887E_250925",
     val passwordInput: String = "12345678",
     val ssidValidationError: String? = null,
     val isWifiConnecting: Boolean = false,
@@ -27,3 +27,11 @@ data class DashboardUiState(
     val clusterBuild: String = "--",
     val storageSpace: String = "--"
 )
+
+object CurrentSSIDAndPasswordDetails{
+    var ssidInput: String = "RE_887E_250925"
+    var passwordInput: String = "12345678"
+
+    val adbHostInput: String = "192.168.1.1"
+    val adbPortInput: String = "5555"
+}
