@@ -112,27 +112,32 @@ fun MainAppContent() {
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkBackground,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.TwoWheeler, contentDescription = null, tint = RedPrimary)
-                        Text(text = "FF PROVISIONING", color = RedPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
-                    }
-                },
-                actions = {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = env.badgeBackground,
-                        modifier = Modifier.padding(end = 12.dp).clickable { showVariantDialog = true }
-                    ) {
-                        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(modifier = Modifier.size(6.dp).background(env.badgeColor, shape = RoundedCornerShape(3.dp)))
-                            Text(text = EnvironmentConfig.formattedVariantDisplay, color = env.badgeColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            val isSetupScreen = currentRoute == Screen.Landing.route || 
+                              currentRoute == Screen.WifiSetup.route || 
+                              currentRoute == Screen.AdbSetup.route
+            if (!isSetupScreen) {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(imageVector = Icons.Default.TwoWheeler, contentDescription = null, tint = RedPrimary)
+                            Text(text = "FF PROVISIONING", color = RedPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
-            )
+                    },
+                    actions = {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = env.badgeBackground,
+                            modifier = Modifier.padding(end = 12.dp).clickable { showVariantDialog = true }
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(modifier = Modifier.size(6.dp).background(env.badgeColor, shape = RoundedCornerShape(3.dp)))
+                                Text(text = EnvironmentConfig.formattedVariantDisplay, color = env.badgeColor, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
+                )
+            }
         },
         bottomBar = {
             // Navigation bar only shown when ADB is linked and we are out of setup
@@ -180,7 +185,14 @@ fun MainAppContent() {
                 WifiSetupScreen(
                     viewModel = dashboardViewModel,
                     onWifiConnected = {
-                        navController.navigate(Screen.AdbSetup.route)
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Landing.route) { inclusive = false }
+                        }
+                    },
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
                     }
                 )
             }
@@ -189,12 +201,15 @@ fun MainAppContent() {
                 AdbSetupScreen(
                     viewModel = dashboardViewModel,
                     onAdbConnected = {
-                        // After bridge established, move to dashboard and clear setup flow
                         navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Landing.route) { inclusive = true }
+                            popUpTo(Screen.Landing.route) { inclusive = false }
                         }
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        if (navController.previousBackStackEntry != null) {
+                            navController.popBackStack()
+                        }
+                    }
                 )
             }
 

@@ -1,10 +1,18 @@
 package com.royalenfield.provisioning.feature.dashboard.presentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,14 +22,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.royalenfield.provisioning.core.theme.*
+
+// Colors matched to the reference screenshot
+private val ScreenBackground = Color(0xFF141716)
+private val CardBackground = Color(0xFF1B1F1E)
+private val TopBarBackButtonBg = Color(0xFF222725)
+private val TextMutedGray = Color(0xFF9E9E9E)
+private val LabelGray = Color(0xFF757575)
+private val UnderlineColor = Color(0xFF38403C)
+private val GreenButtonBg = Color(0xFF102820)
+private val GreenButtonBorder = Color(0xFF2DD4BF)
+private val GreenButtonText = Color(0xFF34D399)
 
 @Composable
 fun LandingScreen(
@@ -30,7 +54,7 @@ fun LandingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(ScreenBackground)
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -68,203 +92,479 @@ fun LandingScreen(
     }
 }
 
+/**
+ * Unified Wi-Fi & ADB Setup Screen matching the reference layout
+ * Displays Vehicle Wi-Fi and ADB Connect sections vertically one by one.
+ */
 @Composable
-fun WifiSetupScreen(
+fun WifiAdbUnifiedSetupScreen(
     viewModel: DashboardViewModel,
-    onWifiConnected: () -> Unit
+    onNavigateToDashboard: () -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
-
-    // Automatically navigate once connected
-    LaunchedEffect(uiState.isWifiConnected) {
-        if (uiState.isWifiConnected) {
-            onWifiConnected()
-        }
-    }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
-            .padding(24.dp)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(ScreenBackground)
     ) {
-        SetupHeader(step = 1, title = "Vehicle Wi-Fi")
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            shape = RoundedCornerShape(16.dp)
+        // Top Header Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(text = "Step 1: Local Network link", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
-                Text(text = "Connect to motorcycle SoftAP to begin telemetry sync.", style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 4.dp, bottom = 24.dp))
-
-                OutlinedTextField(
-                    value = uiState.ssidInput,
-                    onValueChange = { viewModel.onSsidChanged(it) },
-                    label = { Text("Vehicle SSID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    isError = uiState.ssidValidationError != null,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RedPrimary,
-                        unfocusedBorderColor = DarkSurfaceVariant,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    )
+            // Circular Back Button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(TopBarBackButtonBg)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
                 )
+            }
 
-                if (uiState.ssidValidationError != null) {
-                    Text(text = uiState.ssidValidationError ?: "", color = RedPrimary, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
-                }
+            // Centered Title
+            Text(
+                text = "Wi-Fi & ADB",
+                color = Color.White,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 40.dp) // Balance the back button
+            )
+        }
 
-                Spacer(modifier = Modifier.height(16.dp))
+        // Scrollable Content displaying Wi-Fi and ADB sections vertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            // ================= SECTION 1: VEHICLE WI-FI =================
+            Text(
+                text = "VEHICLE WI-FI",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp
+            )
 
-                OutlinedTextField(
-                    value = uiState.passwordInput,
-                    onValueChange = { viewModel.onPasswordChanged(it) },
-                    label = { Text("Password") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RedPrimary,
-                        unfocusedBorderColor = DarkSurfaceVariant,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Enter the vehicle's Wi-Fi SSID and passphrase to join its network.",
+                color = TextMutedGray,
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Wi-Fi SSID Input
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Wi-Fi SSID",
+                    color = LabelGray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal
                 )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = { viewModel.connectWifi() },
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isWifiConnecting && uiState.ssidValidationError == null,
-                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-                    shape = RoundedCornerShape(8.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (uiState.isWifiConnecting) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                    else Text("CONNECT TO VEHICLE")
-                }
+                    BasicTextField(
+                        value = uiState.ssidInput,
+                        onValueChange = { viewModel.onSsidChanged(it) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontFamily = FontFamily.Default
+                        ),
+                        cursorBrush = SolidColor(GreenButtonText),
+                        decorationBox = { innerTextField ->
+                            if (uiState.ssidInput.isEmpty()) {
+                                Text("RE_3EJQ_250925", color = LabelGray, fontSize = 16.sp)
+                            }
+                            innerTextField()
+                        }
+                    )
 
-                if (uiState.wifiErrorMessage != null) {
-                    Text(text = uiState.wifiErrorMessage ?: "", color = RedPrimary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
+                    if (uiState.ssidInput.isNotEmpty()) {
+                        IconButton(
+                            onClick = { viewModel.onSsidChanged("") },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear SSID",
+                                tint = LabelGray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(
+                    color = if (uiState.ssidValidationError != null) RedPrimary else UnderlineColor,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                if (uiState.ssidValidationError != null) {
+                    Text(
+                        text = uiState.ssidValidationError ?: "",
+                        color = RedPrimary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Wi-Fi Passphrase Input
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Wi-Fi Passphrase",
+                    color = LabelGray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicTextField(
+                        value = uiState.passwordInput,
+                        onValueChange = { viewModel.onPasswordChanged(it) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        textStyle = TextStyle(
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontFamily = FontFamily.Default
+                        ),
+                        cursorBrush = SolidColor(GreenButtonText),
+                        decorationBox = { innerTextField ->
+                            if (uiState.passwordInput.isEmpty()) {
+                                Text("Passphrase", color = LabelGray, fontSize = 16.sp)
+                            }
+                            innerTextField()
+                        }
+                    )
+
+                    if (uiState.passwordInput.isNotEmpty()) {
+                        IconButton(
+                            onClick = { viewModel.onPasswordChanged("") },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear Password",
+                                tint = LabelGray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = { passwordVisible = !passwordVisible },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle Password Visibility",
+                            tint = LabelGray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                HorizontalDivider(
+                    color = UnderlineColor,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Wi-Fi Connection Action Button
+            Button(
+                onClick = {
+                    if (uiState.isWifiConnected) {
+                        viewModel.disconnectWifi()
+                    } else {
+                        viewModel.connectWifi()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (uiState.isWifiConnected) GreenButtonBorder else Color(0xFF26332E)
+                ),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (uiState.isWifiConnected) GreenButtonBg else Color(0xFF17201D),
+                    contentColor = if (uiState.isWifiConnected) GreenButtonText else Color(0xFF94A3B8)
+                ),
+                enabled = !uiState.isWifiConnecting
+            ) {
+                if (uiState.isWifiConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = GreenButtonText,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Connecting to Wi-Fi...", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                } else if (uiState.isWifiConnected) {
+                    Text(
+                        text = "Wi-Fi Connected",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GreenButtonText
+                    )
+                } else {
+                    Text(
+                        text = "Connect to Wi-Fi",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            if (uiState.wifiErrorMessage != null) {
+                Text(
+                    text = uiState.wifiErrorMessage ?: "",
+                    color = RedPrimary,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                )
+            }
+
+            // ================= SECTION 2: ADB CONNECT (Shown only once Wi-Fi is connected) =================
+            AnimatedVisibility(
+                visible = uiState.isWifiConnected,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Divider between Wi-Fi and ADB sections
+                    HorizontalDivider(
+                        color = Color(0xFF222825),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(vertical = 32.dp)
+                    )
+
+                    Text(
+                        text = "ADB Connect",
+                        color = Color.White,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Connect to the vehicle's Android unit over ADB now that the phone has joined its Wi-Fi network.",
+                        color = TextMutedGray,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Device IP Address Input
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Device IP Address",
+                            color = LabelGray,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BasicTextField(
+                                value = uiState.adbHostInput,
+                                onValueChange = { viewModel.onAdbHostChanged(it) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                textStyle = TextStyle(
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontFamily = FontFamily.Default
+                                ),
+                                cursorBrush = SolidColor(GreenButtonText),
+                                decorationBox = { innerTextField ->
+                                    if (uiState.adbHostInput.isEmpty()) {
+                                        Text("192.168.1.1", color = LabelGray, fontSize = 16.sp)
+                                    }
+                                    innerTextField()
+                                }
+                            )
+
+                            if (uiState.adbHostInput.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { viewModel.onAdbHostChanged("") },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear IP",
+                                        tint = LabelGray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        HorizontalDivider(
+                            color = UnderlineColor,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // ADB Connection Action Button
+                    Button(
+                        onClick = {
+                            if (uiState.isAdbConnected) {
+                                viewModel.disconnectAdb()
+                            } else {
+                                viewModel.connectAdb()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (uiState.isAdbConnected) GreenButtonBorder else Color(0xFF26332E)
+                        ),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (uiState.isAdbConnected) GreenButtonBg else Color(0xFF17201D),
+                            contentColor = if (uiState.isAdbConnected) GreenButtonText else Color(0xFF94A3B8)
+                        ),
+                        enabled = !uiState.isAdbConnecting
+                    ) {
+                        if (uiState.isAdbConnecting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = GreenButtonText,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Connecting ADB...", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        } else if (uiState.isAdbConnected) {
+                            Text(
+                                text = "ADB Connected — Disconnect",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GreenButtonText
+                            )
+                        } else {
+                            Text(
+                                text = "Connect via ADB",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    if (uiState.adbErrorMessage != null) {
+                        Text(
+                            text = uiState.adbErrorMessage ?: "",
+                            color = RedPrimary,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                        )
+                    }
+
+                    if (uiState.isAdbConnected) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onNavigateToDashboard,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                        ) {
+                            Text("ENTER SERVICE DASHBOARD", fontWeight = FontWeight.Bold, color = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
+}
+
+// Aliases for compatibility
+@Composable
+fun WifiSetupScreen(
+    viewModel: DashboardViewModel,
+    onWifiConnected: () -> Unit = {},
+    onBack: () -> Unit = {}
+) {
+    WifiAdbUnifiedSetupScreen(
+        viewModel = viewModel,
+        onNavigateToDashboard = onWifiConnected,
+        onBack = onBack
+    )
 }
 
 @Composable
 fun AdbSetupScreen(
     viewModel: DashboardViewModel,
-    onAdbConnected: () -> Unit,
-    onBack: () -> Unit
+    onAdbConnected: () -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val scrollState = rememberScrollState()
-
-    // Automatically navigate once connected
-    LaunchedEffect(uiState.isAdbConnected) {
-        if (uiState.isAdbConnected) {
-            onAdbConnected()
-        }
-    }
-
-    // Safety: If Wi-Fi link drops, pop back
-    LaunchedEffect(uiState.isWifiConnected) {
-        if (!uiState.isWifiConnected) {
-            onBack()
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .padding(24.dp)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        SetupHeader(step = 2, title = "ADB Bridge")
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
-                    viewModel.disconnectWifi()
-                    onBack()
-                }) {
-                    Icon(imageVector = Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back", tint = TextSecondary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Back to Wi-Fi", color = TextSecondary, fontSize = 14.sp)
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(text = "Step 2: Service Tunnel", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
-                Text(text = "Connected to ${uiState.connectedSsid}. Establishing bridge...", style = MaterialTheme.typography.bodySmall, color = GreenAccent, modifier = Modifier.padding(top = 4.dp, bottom = 24.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = uiState.adbHostInput,
-                        onValueChange = { viewModel.onAdbHostChanged(it) },
-                        label = { Text("Vehicle IP") },
-                        modifier = Modifier.weight(1.5f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BlueAccent,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        )
-                    )
-
-                    OutlinedTextField(
-                        value = uiState.adbPortInput,
-                        onValueChange = { viewModel.onAdbPortChanged(it) },
-                        label = { Text("Port") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BlueAccent,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = { viewModel.connectAdb() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isAdbConnecting,
-                    colors = ButtonDefaults.buttonColors(containerColor = BlueAccent),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    if (uiState.isAdbConnecting) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                    else Text("ESTABLISH ADB LINK")
-                }
-
-                if (uiState.adbErrorMessage != null) {
-                    Text(text = uiState.adbErrorMessage ?: "", color = RedPrimary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp))
-                }
-            }
-        }
-    }
+    WifiAdbUnifiedSetupScreen(
+        viewModel = viewModel,
+        onNavigateToDashboard = onAdbConnected,
+        onBack = onBack
+    )
 }
 
 @Composable
@@ -278,7 +578,7 @@ fun DashboardFunctionalScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(ScreenBackground)
             .padding(16.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -323,23 +623,12 @@ fun DashboardFunctionalScreen(
         OutlinedButton(
             onClick = { viewModel.disconnectWifi() },
             modifier = Modifier.fillMaxWidth(),
-            border = androidx.compose.foundation.BorderStroke(1.dp, RedPrimary),
+            border = BorderStroke(1.dp, RedPrimary),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = RedPrimary)
         ) {
             Text("TERMINATE VEHICLE LINK", fontWeight = FontWeight.Bold)
         }
-    }
-}
-
-@Composable
-private fun SetupHeader(step: Int, title: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(shape = RoundedCornerShape(12.dp), color = if (step == 1) RedPrimary.copy(alpha = 0.1f) else BlueAccent.copy(alpha = 0.1f)) {
-            Text(text = "STEP $step", color = if (step == 1) RedPrimary else BlueAccent, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Black, fontSize = 12.sp)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = title, style = MaterialTheme.typography.headlineSmall, color = TextPrimary, fontWeight = FontWeight.Black)
     }
 }
 
