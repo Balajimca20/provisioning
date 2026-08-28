@@ -47,51 +47,6 @@ private val GreenButtonBg = Color(0xFF102820)
 private val GreenButtonBorder = Color(0xFF2DD4BF)
 private val GreenButtonText = Color(0xFF34D399)
 
-@Composable
-fun LandingScreen(
-    onStartSetup: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(ScreenBackground)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = Icons.Default.TwoWheeler,
-            contentDescription = null,
-            tint = RedPrimary,
-            modifier = Modifier.size(100.dp)
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "FF PROVISIONING",
-            style = MaterialTheme.typography.headlineMedium,
-            color = RedPrimary,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp
-        )
-        Text(
-            text = "Vehicle Service & Connectivity Suite",
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextSecondary
-        )
-        
-        Spacer(modifier = Modifier.height(64.dp))
-        
-        Button(
-            onClick = onStartSetup,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text("BEGIN CONNECTION SETUP", fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
 /**
  * Unified Wi-Fi & ADB Setup Screen matching the reference layout
  * Displays Vehicle Wi-Fi and ADB Connect sections vertically one by one.
@@ -176,37 +131,14 @@ fun WifiAdbUnifiedSetupScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             // Wi-Fi SSID Input
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Wi-Fi SSID",
-                    color = LabelGray,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = uiState.ssidInput,
-                        onValueChange = { viewModel.onSsidChanged(it) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontFamily = FontFamily.Default
-                        ),
-                        cursorBrush = SolidColor(GreenButtonText),
-                        decorationBox = { innerTextField ->
-                            if (uiState.ssidInput.isEmpty()) {
-                                Text("RE_3EJQ_250925", color = LabelGray, fontSize = 16.sp)
-                            }
-                            innerTextField()
-                        }
-                    )
-
+            OutlinedTextField(
+                value = uiState.ssidInput,
+                onValueChange = { viewModel.onSsidChanged(it) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Wi-Fi SSID") },
+                placeholder = { Text("Enter Wi-Fi SSID", color = LabelGray) },
+                trailingIcon = {
                     if (uiState.ssidInput.isNotEmpty()) {
                         IconButton(
                             onClick = { viewModel.onSsidChanged("") },
@@ -216,96 +148,90 @@ fun WifiAdbUnifiedSetupScreen(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Clear SSID",
                                 tint = LabelGray,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                }
-                HorizontalDivider(
-                    color = if (uiState.ssidValidationError != null) RedPrimary else UnderlineColor,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                if (uiState.ssidValidationError != null) {
-                    Text(
-                        text = uiState.ssidValidationError ?: "",
-                        color = RedPrimary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
+                },
+                isError = uiState.ssidValidationError != null,
+                supportingText = {
+                    if (uiState.ssidValidationError != null) {
+                        Text(
+                            text = uiState.ssidValidationError ?: "",
+                            color = RedPrimary,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = GreenButtonBorder,
+                    unfocusedBorderColor = UnderlineColor,
+                    errorBorderColor = RedPrimary,
+                    focusedLabelColor = GreenButtonText,
+                    unfocusedLabelColor = LabelGray,
+                    cursorColor = GreenButtonText
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Wi-Fi Passphrase Input
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Wi-Fi Passphrase",
-                    color = LabelGray,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = uiState.passwordInput,
-                        onValueChange = { viewModel.onPasswordChanged(it) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        textStyle = TextStyle(
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontFamily = FontFamily.Default
-                        ),
-                        cursorBrush = SolidColor(GreenButtonText),
-                        decorationBox = { innerTextField ->
-                            if (uiState.passwordInput.isEmpty()) {
-                                Text("Passphrase", color = LabelGray, fontSize = 16.sp)
+            OutlinedTextField(
+                value = uiState.passwordInput,
+                onValueChange = { viewModel.onPasswordChanged(it) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Wi-Fi Passphrase") },
+                placeholder = { Text("Enter Passphrase", color = LabelGray) },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        if (uiState.passwordInput.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.onPasswordChanged("") },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear Password",
+                                    tint = LabelGray,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            innerTextField()
+                            Spacer(modifier = Modifier.width(4.dp))
                         }
-                    )
-
-                    if (uiState.passwordInput.isNotEmpty()) {
                         IconButton(
-                            onClick = { viewModel.onPasswordChanged("") },
+                            onClick = { passwordVisible = !passwordVisible },
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear Password",
+                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Toggle Password Visibility",
                                 tint = LabelGray,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(
-                        onClick = { passwordVisible = !passwordVisible },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = "Toggle Password Visibility",
-                            tint = LabelGray,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-                HorizontalDivider(
-                    color = UnderlineColor,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = GreenButtonBorder,
+                    unfocusedBorderColor = UnderlineColor,
+                    errorBorderColor = RedPrimary,
+                    focusedLabelColor = GreenButtonText,
+                    unfocusedLabelColor = LabelGray,
+                    cursorColor = GreenButtonText
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
 
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -402,38 +328,15 @@ fun WifiAdbUnifiedSetupScreen(
                     Spacer(modifier = Modifier.height(28.dp))
 
                     // Device IP Address Input
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "Device IP Address",
-                            color = LabelGray,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BasicTextField(
-                                value = uiState.adbHostInput,
-                                onValueChange = { viewModel.onAdbHostChanged(it) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                textStyle = TextStyle(
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontFamily = FontFamily.Default
-                                ),
-                                cursorBrush = SolidColor(GreenButtonText),
-                                decorationBox = { innerTextField ->
-                                    if (uiState.adbHostInput.isEmpty()) {
-                                        Text("192.168.1.1", color = LabelGray, fontSize = 16.sp)
-                                    }
-                                    innerTextField()
-                                }
-                            )
-
+                    OutlinedTextField(
+                        value = uiState.adbHostInput,
+                        onValueChange = { viewModel.onAdbHostChanged(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Device IP Address") },
+                        placeholder = { Text("Enter Device IP Address (e.g. 192.168.1.1)", color = LabelGray) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        trailingIcon = {
                             if (uiState.adbHostInput.isNotEmpty()) {
                                 IconButton(
                                     onClick = { viewModel.onAdbHostChanged("") },
@@ -443,17 +346,23 @@ fun WifiAdbUnifiedSetupScreen(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = "Clear IP",
                                         tint = LabelGray,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
-                        }
-                        HorizontalDivider(
-                            color = UnderlineColor,
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = GreenButtonBorder,
+                            unfocusedBorderColor = UnderlineColor,
+                            errorBorderColor = RedPrimary,
+                            focusedLabelColor = GreenButtonText,
+                            unfocusedLabelColor = LabelGray,
+                            cursorColor = GreenButtonText
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
 
                     Spacer(modifier = Modifier.height(28.dp))
 

@@ -30,7 +30,6 @@ import com.royalenfield.provisioning.core.theme.*
 import com.royalenfield.provisioning.feature.dashboard.presentation.AdbSetupScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardFunctionalScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
-import com.royalenfield.provisioning.feature.dashboard.presentation.LandingScreen
 import com.royalenfield.provisioning.feature.dashboard.presentation.WifiSetupScreen
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAView
 import com.royalenfield.provisioning.feature.ota.presentation.CommandLineOTAViewModel
@@ -43,7 +42,6 @@ import com.royalenfield.provisioning.feature.wifitracker.presentation.WifiTracke
 import org.koin.androidx.compose.koinViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
-    object Landing : Screen("landing", "Welcome")
     object WifiSetup : Screen("wifi_setup", "Wi-Fi Setup")
     object AdbSetup : Screen("adb_setup", "ADB Setup")
     
@@ -89,20 +87,11 @@ fun MainAppContent() {
 
     // Automatically navigate to Wifi or ADB screen whenever disconnected based on status
     LaunchedEffect(uiState.isWifiConnected, uiState.isAdbConnected, currentRoute) {
-        if (currentRoute != Screen.Landing.route) {
-            if (!uiState.isWifiConnected) {
-                if (currentRoute != Screen.WifiSetup.route) {
-                    navController.navigate(Screen.WifiSetup.route) {
-                        popUpTo(Screen.Landing.route) { inclusive = false }
-                        launchSingleTop = true
-                    }
-                }
-            } else if (!uiState.isAdbConnected) {
-                if (currentRoute != Screen.AdbSetup.route && currentRoute != Screen.WifiSetup.route) {
-                    navController.navigate(Screen.AdbSetup.route) {
-                        popUpTo(Screen.Landing.route) { inclusive = false }
-                        launchSingleTop = true
-                    }
+        if (!uiState.isWifiConnected) {
+            if (currentRoute != Screen.WifiSetup.route) {
+                navController.navigate(Screen.WifiSetup.route) {
+                    popUpTo(Screen.WifiSetup.route) { inclusive = true }
+                    launchSingleTop = true
                 }
             }
         }
@@ -112,8 +101,7 @@ fun MainAppContent() {
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkBackground,
         topBar = {
-            val isSetupScreen = currentRoute == Screen.Landing.route || 
-                              currentRoute == Screen.WifiSetup.route || 
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route || 
                               currentRoute == Screen.AdbSetup.route
             if (!isSetupScreen) {
                 TopAppBar(
@@ -141,8 +129,7 @@ fun MainAppContent() {
         },
         bottomBar = {
             // Navigation bar only shown when ADB is linked and we are out of setup
-            val isSetupScreen = currentRoute == Screen.Landing.route || 
-                              currentRoute == Screen.WifiSetup.route || 
+            val isSetupScreen = currentRoute == Screen.WifiSetup.route || 
                               currentRoute == Screen.AdbSetup.route
             if (uiState.isAdbConnected && !isSetupScreen) {
                 NavigationBar(containerColor = DarkSurface) {
@@ -174,19 +161,15 @@ fun MainAppContent() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Landing.route,
+            startDestination = Screen.WifiSetup.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Landing.route) {
-                LandingScreen(onStartSetup = { navController.navigate(Screen.WifiSetup.route) })
-            }
-
             composable(Screen.WifiSetup.route) {
                 WifiSetupScreen(
                     viewModel = dashboardViewModel,
                     onWifiConnected = {
                         navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Landing.route) { inclusive = false }
+                            launchSingleTop = true
                         }
                     },
                     onBack = {
@@ -202,7 +185,7 @@ fun MainAppContent() {
                     viewModel = dashboardViewModel,
                     onAdbConnected = {
                         navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Landing.route) { inclusive = false }
+                            launchSingleTop = true
                         }
                     },
                     onBack = {

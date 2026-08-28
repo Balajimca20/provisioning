@@ -4,8 +4,8 @@ data class DashboardUiState(
     val isSetupStarted: Boolean = false,
     
     // Step 1: Wi-Fi Connection
-    val ssidInput: String = "RE_3EJQ_250925",
-    val passwordInput: String = "12345678",
+    val ssidInput: String = "",
+    val passwordInput: String = "",
     val ssidValidationError: String? = null,
     val isWifiConnecting: Boolean = false,
     val isWifiConnected: Boolean = false,
@@ -21,9 +21,9 @@ data class DashboardUiState(
     val isAdbRooted: Boolean = false,
     val adbErrorMessage: String? = null,
 
-    // Vehicle Quick Telemetry
-    val batteryVoltage: String = "12.8V",
-    val ecuStatus: String = "LINK ACTIVE",
-    val clusterBuild: String = "RE_HIM450_V2.1.0_REL",
-    val storageSpace: String = "14.2 GB Free"
+    // Vehicle Quick Telemetry (Real-time telemetry updated via connection/daemon)
+    val batteryVoltage: String = "--",
+    val ecuStatus: String = "DISCONNECTED",
+    val clusterBuild: String = "--",
+    val storageSpace: String = "--"
 )
