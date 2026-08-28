@@ -543,56 +543,9 @@ private fun WifiTransactionLogDialogContent(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black
                 )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Search Bar
-                Row(
-                    modifier = Modifier
-                        .width(260.dp)
-                        .height(34.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF08101E))
-                        .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    BasicTextField(
-                        value = uiState.logSearchQuery,
-                        onValueChange = onSearchQueryChanged,
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = Color(0xFF93C5FD),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp
-                        ),
-                        cursorBrush = SolidColor(Color(0xFF60A5FA)),
-                        decorationBox = { innerTextField ->
-                            if (uiState.logSearchQuery.isEmpty()) {
-                                Text(
-                                    text = "Filter by VIN, SSID, or MAC...",
-                                    color = Color(0xFF3B82F6).copy(alpha = 0.5f),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            innerTextField()
-                        }
-                    )
-                }
 
                 // Close Icon View on Top-Right Corner
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF1E293B))
-                ) {
+                IconButton(onClick = onClose,) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
@@ -600,6 +553,47 @@ private fun WifiTransactionLogDialogContent(
                         modifier = Modifier.size(18.dp)
                     )
                 }
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Search Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFF08101E))
+                    .border(1.dp, Color(0xFF1E3A8A), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🔍 Search: ", color = Color(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                BasicTextField(
+                    value = uiState.logSearchQuery,
+                    onValueChange = onSearchQueryChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = Color(0xFF93C5FD),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    ),
+                    cursorBrush = SolidColor(Color(0xFF60A5FA)),
+                    decorationBox = { innerTextField ->
+                        if (uiState.logSearchQuery.isEmpty()) {
+                            Text(
+                                text = "Filter by VIN, SSID, or MAC...",
+                                color = Color(0xFF3B82F6).copy(alpha = 0.5f),
+                                fontSize = 11.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
             }
         }
 

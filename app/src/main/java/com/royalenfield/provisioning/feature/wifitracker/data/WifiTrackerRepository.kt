@@ -1,5 +1,6 @@
 package com.royalenfield.provisioning.feature.wifitracker.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +11,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class WifiLogRecord(
     val vin: String = "",
@@ -20,8 +22,8 @@ data class WifiLogRecord(
     val status: String = "SUCCESS",
     val oldSsid: String = "",
     val newSsid: String = "",
-    val operator: String = "Field Mechanic",
-    val vehicleModel: String = "Hunter 350 / Himalayan 450"
+    val operator: String = "",
+    val vehicleModel: String = ""
 )
 
 class WifiTrackerRepository(
