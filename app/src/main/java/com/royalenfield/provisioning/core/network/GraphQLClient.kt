@@ -30,27 +30,27 @@ data class GraphQLError(
     val path: List<String>? = null
 )
 
-class GraphQLClient(
-     val httpClient: HttpClient,
-    val baseUrlProvider: () -> String
-) {
-    suspend inline fun <reified T> execute(request: GraphQLRequest): Result<T> {
-        return try {
-            val url = "${baseUrlProvider().trimEnd('/')}/graphql"
-            val response = httpClient.post(url) {
-                setBody(request)
-            }.body<GraphQLResponse<T>>()
-
-            if (!response.errors.isNullOrEmpty()) {
-                val errorMsg = response.errors.joinToString("; ") { it.message }
-                Result.failure(Exception("GraphQL Error: $errorMsg"))
-            } else if (response.data != null) {
-                Result.success(response.data)
-            } else {
-                Result.failure(Exception("Empty GraphQL response data"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-}
+//class GraphQLClient(
+//     val httpClient: HttpClient,
+//    val baseUrlProvider: () -> String
+//) {
+//    suspend inline fun <reified T> execute(request: GraphQLRequest): Result<T> {
+//        return try {
+//            val url = "${baseUrlProvider().trimEnd('/')}/graphql"
+//            val response = httpClient.post(url) {
+//                setBody(request)
+//            }.body<GraphQLResponse<T>>()
+//
+//            if (!response.errors.isNullOrEmpty()) {
+//                val errorMsg = response.errors.joinToString("; ") { it.message }
+//                Result.failure(Exception("GraphQL Error: $errorMsg"))
+//            } else if (response.data != null) {
+//                Result.success(response.data)
+//            } else {
+//                Result.failure(Exception("Empty GraphQL response data"))
+//            }
+//        } catch (e: Exception) {
+//            Result.failure(e)
+//        }
+//    }
+//}

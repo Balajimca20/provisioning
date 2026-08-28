@@ -1,203 +1,225 @@
 package com.royalenfield.provisioning.feature.supplierfeed.presentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.royalenfield.provisioning.core.theme.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+// Dark Theme Color Palette
+private val DarkBg = Color(0xFF1018)
+private val CardBg = Color(0xFF09121D)
+private val BorderColor = Color(0xFF12314E)
+private val AccentCyan = Color(0xFF00E5FF)
+private val LabelColor = Color(0xFF8DA4BE)
+private val InputBg = Color(0xFF0B1726)
 
 @Composable
-fun SupplierFeedScreen(
-    viewModel: SupplierFeedViewModel
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    val scrollState = rememberScrollState()
+fun SupplierFeedScreen(viewModel: SupplierFeedViewModel = viewModel()) {
+
+    val uiState = viewModel.deviceData.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(DarkBg)
             .padding(16.dp)
-            .verticalScroll(scrollState),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Query Input Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            shape = RoundedCornerShape(12.dp)
+        // Top Search Action Bar
+
+        Text("ICCID:", color = AccentCyan, fontWeight = FontWeight.Bold)
+
+        OutlinedTextField(
+            value = uiState.value.iccid,
+            onValueChange = { viewModel.onIccidChanged(it) },
+            placeholder = { Text("Enter or paste 19/20-digit ICCID", color = LabelColor) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color.Black,
+                unfocusedContainerColor = Color.Black,
+                focusedBorderColor = AccentCyan,
+                unfocusedBorderColor = BorderColor,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                cursorColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(
+            onClick = { viewModel.fetchIccidViaDadb() },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0C3552)),
+            shape = RoundedCornerShape(4.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "OEM Supplier Telemetry GraphQL Feed",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Queries live cloud diagnostics via Ktor GraphQL engine",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    fontSize = 12.sp
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = uiState.serialNumberInput,
-                        onValueChange = { viewModel.onSerialNumberChanged(it) },
-                        label = { Text("Device Serial / VIN") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PurpleAccent,
-                            unfocusedBorderColor = DarkSurfaceVariant,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        )
-                    )
-
-                    Button(
-                        onClick = { viewModel.fetchTelemetry() },
-                        colors = ButtonDefaults.buttonColors(containerColor = PurpleAccent),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(56.dp)
-                    ) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Query")
-                        }
-                    }
-                }
-            }
+            Text("Read ICCID from Device", color = AccentCyan)
         }
 
-        // Telemetry Data Card
-        uiState.telemetry?.let { data ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Button(
+                onClick = { viewModel.fetchSupplierFeedResponse() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0C3552)),
+                shape = RoundedCornerShape(4.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = data.model,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = GreenAccent.copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                text = data.canBusHealth,
-                                color = GreenAccent,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+                Text("🔍 Fetch Device", color = AccentCyan)
+            }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TelemetryRow("VIN", data.vin)
-                        TelemetryRow("ECU Hardware Rev", data.ecuHardwareRev)
-                        TelemetryRow("TCU IMEI", data.tcuImei)
-                        TelemetryRow("Cluster OS Build", data.firmwareVersion)
-                        TelemetryRow("Battery Voltage", "${data.batteryVoltage} V")
-                        TelemetryRow("Battery Health", data.batteryHealth)
-                        TelemetryRow("Total Odometer", "${data.odometerKm} km")
-                        TelemetryRow("Engine Hours", "${data.engineHours} hrs")
-                        TelemetryRow("ABS Controller", data.absStatus)
-                    }
-                }
+            Button(
+                onClick = { viewModel.clearForm() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222930)),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text("🧹 Clear Form", color = Color.LightGray)
             }
         }
 
-        // GraphQL Query Inspector Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "GraphQL Query Payload",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
+        // Status Indicator Message
+        if (uiState.value.iccid.isNotEmpty()) {
+            Text(
+                text = "ℹ No device loaded. Enter an ICCID above and click 'Fetch Device'.",
+                color = LabelColor,
+                fontSize = 12.sp
+            )
+        }
+
+        // Section Cards
+        SectionGroup(title = "📦 Core System _Hardware") {
+            Grid3Layout(
+                listOf(
+                    "ICCID:" to uiState.value.iccid, "EUID:" to uiState.value.euid, "System ID:" to uiState.value.systemId,
+                    "Status:" to uiState.value.status, "Model:" to uiState.value.model, "IMEI Primary:" to uiState.value.imeiPrimary,
+                    "IMEI Secondary:" to uiState.value.imeiSecondary, "Serial No:" to uiState.value.serialNo, "Part No:" to uiState.value.partNo,
+                    "HW Version:" to uiState.value.hwVersion, "Vendor Code:" to uiState.value.vendorCode, "Category:" to uiState.value.category
                 )
+            )
+        }
 
-                Spacer(modifier = Modifier.height(8.dp))
+        SectionGroup(title = "🔐 Security _Key Vault") {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(modifier = Modifier.weight(1f)) { DetailField("Admin Key:", uiState.value.adminKey) }
+                Box(modifier = Modifier.weight(1f)) { DetailField("User Key:", uiState.value.userKey) }
+            }
+        }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(DarkBackground)
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        text = uiState.rawGraphQLQuery,
-                        color = TextSecondary,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp
-                    )
-                }
+        SectionGroup(title = "📊 SOM Wireless (Wi-Fi _Bluetooth)") {
+            Grid3Layout(
+                listOf(
+                    "Wi-Fi MAC (2.4GHz):" to uiState.value.wifiMac24, "Wi-Fi SSID (2.4GHz):" to uiState.value.wifiSsid24, "Wi-Fi Passphrase (2.4GHz):" to uiState.value.wifiPass24,
+                    "Wi-Fi MAC (5GHz):" to uiState.value.wifiMac5, "Wi-Fi SSID (5GHz):" to uiState.value.wifiSsid5, "Wi-Fi Passphrase (5GHz):" to uiState.value.wifiPass5,
+                    "SOM BT MAC:" to uiState.value.somBtMac, "SOM BT Connection Name:" to uiState.value.somBtName, "SOM BT Passphrase:" to uiState.value.somBtPass,
+                    "SOM BLE MAC:" to uiState.value.somBleMac, "SOM BLE Passphrase:" to uiState.value.somBlePass, "" to ""
+                )
+            )
+        }
+
+        SectionGroup(title = "📡 BCM Wireless (Bluetooth _BLE)") {
+            Grid3Layout(
+                listOf(
+                    "BCM 1st BLE MAC:" to uiState.value.bcm1stBleMac, "BCM 1st BLE Name:" to uiState.value.bcm1stBleName, "BCM 1st BLE Passphrase:" to uiState.value.bcm1stBlePass,
+                    "BCM 2nd BT MAC:" to uiState.value.bcm2ndBtMac, "BCM 2nd BT Name:" to uiState.value.bcm2ndBtName, "BCM 2nd BT Passphrase:" to uiState.value.bcm2ndBtPass
+                )
+            )
+        }
+
+        SectionGroup(title = "📲 Cellular Modem _eSIM Profile") {
+            Grid3Layout(
+                listOf(
+                    "eSIM IMSI:" to uiState.value.esimImsi, "eSIM MSISDN:" to uiState.value.esimMsisdn, "eSIM APN:" to uiState.value.esimApn,
+                    "eSIM Part No:" to uiState.value.esimPartNo, "eSIM Vendor Code:" to uiState.value.esimVendorCode, "GSM CREG:" to uiState.value.gsmCreg,
+                    "Shipment Invoice:" to uiState.value.shipmentInvoice, "" to "", "" to ""
+                )
+            )
+        }
+
+        SectionGroup(title = "🏭 Software, Firmware _Lifecycle Metadata") {
+            Grid3Layout(
+                listOf(
+                    "SOM Make:" to uiState.value.somMake, "SOM SW Version:" to uiState.value.somSwVersion, "Firmware Version:" to uiState.value.firmwareVersion,
+                    "Config Version:" to uiState.value.configVersion, "Manufacturing Date:" to uiState.value.manufacturingDate, "Created By:" to uiState.value.createdBy,
+                    "Created Time:" to uiState.value.createdTime, "Updated By:" to uiState.value.updatedBy, "Updated Time:" to uiState.value.updatedTime
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CardBg, RoundedCornerShape(6.dp))
+            .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
+            .padding(16.dp)
+    ) {
+        Text(title, color = AccentCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
+        content()
+    }
+}
+
+@Composable
+fun Grid3Layout(items: List<Pair<String, String>>) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach {  item ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                DetailField(label = item.first, value = item.second)
             }
         }
     }
 }
 
 @Composable
-private fun TelemetryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, fontSize = 12.sp, color = TextSecondary)
+fun DetailField(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = value,
-            fontSize = 12.sp,
-            color = TextPrimary,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace
+            text = label,
+            color = LabelColor,
+            fontSize = 11.sp,
+            modifier = Modifier.width(115.dp)
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = InputBg,
+                unfocusedContainerColor = InputBg,
+                focusedBorderColor = BorderColor,
+                unfocusedBorderColor = BorderColor,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            )
         )
     }
 }

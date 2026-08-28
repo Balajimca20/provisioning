@@ -6,7 +6,7 @@ import com.royalenfield.provisioning.feature.supplierfeed.data.SupplierFeedRepos
 class FetchTelemetryUseCase(
     private val supplierFeedRepository: SupplierFeedRepository
 ) {
-    suspend operator fun invoke(serialNumber: String): Result<DeviceTelemetryData> {
-        return supplierFeedRepository.fetchDeviceTelemetry(serialNumber)
-    }
+//    suspend operator fun invoke(serialNumber: String): Result<DeviceTelemetryData> {
+//        return supplierFeedRepository.fetchDeviceTelemetry(serialNumber)
+//    }
 }

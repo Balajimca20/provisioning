@@ -136,7 +136,20 @@ class ProvisioningViewModel(
                 // 2. Acquire root
                 log("🔓 Acquiring Root Access...")
                 _status.value = ProvisioningStatus.Running("Acquiring Root Access", 5)
-                adbClient.runShell("root")
+
+                val rootResult = adbClient.restartAsRoot()
+                when(rootResult){
+                    is AdbResult.Failure -> {
+                        log("❌ Root escalation failed: ${rootResult.message}")
+                        Log.e("TAG", "startProvisioning: Root Failed ${(rootResult as AdbResult.Failure).message}")
+                    }
+                    is AdbResult.Success -> {
+                        log("✅ Root confirmed: ${(rootResult as AdbResult.Success).data}")
+                        Log.e("TAG", "startProvisioning: Root Success ${(rootResult as AdbResult.Success).data}")
+                    }
+                }
+
+            //    adbClient.runShell("root")
 
                 // 3. Stop C2C service
                 log("🛑 Stopping target hub services...")
@@ -146,17 +159,17 @@ class ProvisioningViewModel(
                 // 4. Register cloud metadata
                 log("☁️ Registering Cloud Metadata...")
                 _status.value = ProvisioningStatus.Running("Registering Cloud Metadata", 20)
-//                val isRegistered = repository.registerVehicleMetadata(
-//                    vin = _provisioningUiState.value.vinNumber,
-//                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
-//                    modelDesc = _provisioningUiState.value.selectedVariant.description,
-//                    region = _provisioningUiState.value.selectedRegion.regionName,
-//                    country = _provisioningUiState.value.selectedRegion.country
-//                ).getOrDefault(false)
-//
-//                if (!isRegistered) {
-//                    log("⚠️ Cloud registration returned unexpected status")
-//                }
+                val isRegistered = repository.registerVehicleMetadata(
+                    vin = _provisioningUiState.value.vinNumber,
+                    modelCode = _provisioningUiState.value.selectedVariant.modelCode,
+                    modelDesc = _provisioningUiState.value.selectedVariant.description,
+                    region = _provisioningUiState.value.selectedRegion.regionName,
+                    country = _provisioningUiState.value.selectedRegion.country
+                ).getOrDefault(false)
+
+                if (!isRegistered) {
+                    log("⚠️ Cloud registration returned unexpected status")
+                }
 
                 // 5. Clear telemetry buffer
                 log("🧹 Clearing target buffers...")
@@ -197,16 +210,11 @@ class ProvisioningViewModel(
     }
 
     private suspend fun pushPayloadFiles(payloadFiles: List<File>) {
-        val totalBytes = payloadFiles.sumOf { it.length() }
-        var uploadedBytes = 0L
-
         payloadFiles.forEachIndexed { index, file ->
             yield() // Check for cancellation before each file push
-            
-            log("📤 Pushing ${index + 1}/${payloadFiles.size}: ${file.name}")
-            val fileStartBytes = uploadedBytes
 
-            val adbPush = adbClient.pushFile(file,"/mnt/vendor/persist/c2c/${file.name}")
+            Log.e("PayLoadFiles", "pushPayloadFiles: ${file.name} -- Index : ${index}")
+            val adbPush = adbClient.push(file,"/mnt/vendor/persist/c2c/${file.name}")
 
             when(adbPush){
                 is AdbResult.Failure -> {

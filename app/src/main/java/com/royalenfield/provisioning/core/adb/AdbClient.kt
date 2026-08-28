@@ -53,7 +53,9 @@ class AdbClient(
         try {
             Log.d(TAG, "Executing shell: $command")
             val response = dadb.shell(command)
+            Log.d("TAG", "runShell: ${response.output} ${response.exitCode} ${response.allOutput}")
             if (response.exitCode == 0) {
+                Log.d(TAG, "Shell command succeeded: $command -- ${response.output} ${response.exitCode} ${response.allOutput}")
                 AdbResult.Success(response.output)
             } else {
                 AdbResult.Failure("Command exited with code ${response.exitCode}: ${response.errorOutput}")
@@ -238,7 +240,7 @@ class AdbClient(
             onProgress?.invoke(totalBytes, totalBytes)
             AdbResult.Success(true)
         } catch (e: Exception) {
-            Log.e(TAG, "Push error: ${e.message}", e)
+            Log.e(TAG, "Push error: ${e.message}")
             AdbResult.Failure(e.message ?: "Failed to push $remotePath", e)
         }
     }

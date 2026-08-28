@@ -4,7 +4,6 @@ import com.royalenfield.provisioning.BuildConfig
 import com.royalenfield.provisioning.core.adb.AdbClient
 import com.royalenfield.provisioning.core.adb.AdbKeyPairProvider
 import com.royalenfield.provisioning.core.adb.AdbManager
-import com.royalenfield.provisioning.core.network.GraphQLClient
 import com.royalenfield.provisioning.core.network.KtorClientFactory
 import com.royalenfield.provisioning.core.network.VehicleNetworkConnectionHelper
 import com.royalenfield.provisioning.feature.dashboard.presentation.DashboardViewModel
@@ -32,12 +31,12 @@ val networkModule = module {
         ).createClient()
     }
 
-    single {
-        GraphQLClient(
-            httpClient = get(),
-            baseUrlProvider = { BuildConfig.FF_BASE_URL.ifEmpty { "https://api.royalenfield.com" } }
-        )
-    }
+//    single {
+//        GraphQLClient(
+//            httpClient = get(),
+//            baseUrlProvider = { "https://cbp-in-api.royalenfield.com/ffcomposite/supplier-feed"  }
+//        )
+//    }
 
     single { VehicleNetworkConnectionHelper(androidContext()) }
 }
@@ -51,14 +50,14 @@ val adbModule = module {
 val repositoryModule = module {
     single { WifiChangeLogRepository(androidContext()) }
     single { OtaRepository(httpClient = get(), adbClient = get()) }
-    single { SupplierFeedRepository(graphQLClient = get(), httpClient = get()) }
+    single { SupplierFeedRepository( httpClient = get(),androidContext()) }
     single { ProvisioningRepository(get(),androidContext()) }
 }
 
 val domainModule = module {
     single { WifiUpdateWorkflow(adbManager = get(), logRepository = get()) }
     single { OtaPipeline(otaRepository = get(), adbClient = get()) }
-    single { FetchTelemetryUseCase(supplierFeedRepository = get()) }
+   // single { FetchTelemetryUseCase(supplierFeedRepository = get()) }
 }
 
 val viewModelModule = module {
@@ -95,7 +94,9 @@ val viewModelModule = module {
 
     viewModel {
         SupplierFeedViewModel(
-            fetchTelemetryUseCase = get()
+            adbClient = get(),
+            get()
+            //fetchTelemetryUseCase = get()
         )
     }
 
